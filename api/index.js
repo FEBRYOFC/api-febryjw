@@ -47,6 +47,26 @@ function format_date(input) {
     return `${formatted.replace(".", ":")} WIB`;
 }
 
+function formatJsonResponse(res, data, statusCode = 200) {
+    res.setHeader('Content-Type', 'application/json');
+    res.status(statusCode).send(JSON.stringify(data, null, 4));
+}
+
+function errorResponse(res, statusCode, message, details = null) {
+    const response = {
+        success: false,
+        creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+        message: message,
+        timestamp: new Date().toISOString()
+    };
+    
+    if (details) {
+        response.details = details;
+    }
+    
+    formatJsonResponse(res, response, statusCode);
+}
+
 const audio = [92, 128, 256, 320];
 const video = [144, 360, 480, 720, 1080];
 
@@ -119,7 +139,12 @@ async function ytmp3(link, quality = 128) {
         const format = audio.includes(Number(quality)) ? Number(quality) : 128;
 
         if (!videoId) {
-            return { success: false, error: 'Invalid YouTube URL' };
+            return { 
+                success: false, 
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: 'Invalid YouTube URL',
+                timestamp: new Date().toISOString()
+            };
         }
 
         const url = `https://youtube.com/watch?v=${videoId}`;
@@ -127,22 +152,61 @@ async function ytmp3(link, quality = 128) {
         const downloadResult = await savetube(url, format, "audio");
 
         if (!downloadResult.success) {
-            return { success: false, error: downloadResult.message };
+            return { 
+                success: false, 
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: downloadResult.message,
+                timestamp: new Date().toISOString()
+            };
         }
+
+        // Get detailed metadata
+        const metadataResult = await ytMetadata(url);
+        
+        const metadata = metadataResult.success ? {
+            videoId: metadataResult.videoId,
+            title: metadataResult.title,
+            description: metadataResult.description,
+            channelId: metadataResult.channelId,
+            channelTitle: metadataResult.channelTitle,
+            thumbnails: metadataResult.thumbnails,
+            tags: metadataResult.tags || [],
+            publishedAt: metadataResult.publishedAt,
+            publishedFormat: metadataResult.publishedFormat,
+            statistics: metadataResult.statistics,
+            duration: searchData?.duration?.timestamp || `${Math.floor(downloadResult.duration / 60)}:${downloadResult.duration % 60}`,
+            durationSeconds: searchData?.duration?.seconds || downloadResult.duration,
+            url: url
+        } : {
+            videoId: videoId,
+            title: searchData?.title || downloadResult.title,
+            description: searchData?.description || '',
+            channelTitle: searchData?.author?.name,
+            thumbnails: [
+                {
+                    quality: "high",
+                    url: searchData?.thumbnail || downloadResult.thumbnail,
+                    width: 480,
+                    height: 360
+                }
+            ],
+            tags: [],
+            publishedAt: searchData?.uploadedAt,
+            statistics: {
+                viewCount: searchData?.views || 0,
+                likeCount: 0,
+                commentCount: 0
+            },
+            duration: searchData?.duration?.timestamp || `${Math.floor(downloadResult.duration / 60)}:${downloadResult.duration % 60}`,
+            durationSeconds: searchData?.duration?.seconds || downloadResult.duration,
+            url: url
+        };
 
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-            metadata: {
-                videoId: videoId,
-                title: searchData?.title || downloadResult.title,
-                duration: searchData?.duration?.seconds || downloadResult.duration,
-                thumbnail: searchData?.thumbnail || downloadResult.thumbnail,
-                author: searchData?.author?.name,
-                views: searchData?.views,
-                uploaded: searchData?.uploadedAt,
-                url: url
-            },
+            timestamp: new Date().toISOString(),
+            metadata: metadata,
             download: {
                 quality: downloadResult.quality,
                 availableQuality: downloadResult.availableQuality,
@@ -151,7 +215,12 @@ async function ytmp3(link, quality = 128) {
         };
     } catch (error) {
         console.error("YTMP3 error:", error);
-        return { success: false, error: error.message };
+        return { 
+            success: false, 
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
@@ -161,7 +230,12 @@ async function ytmp4(link, quality = 360) {
         const format = video.includes(Number(quality)) ? Number(quality) : 360;
 
         if (!videoId) {
-            return { success: false, error: 'Invalid YouTube URL' };
+            return { 
+                success: false, 
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: 'Invalid YouTube URL',
+                timestamp: new Date().toISOString()
+            };
         }
 
         const url = `https://youtube.com/watch?v=${videoId}`;
@@ -169,22 +243,61 @@ async function ytmp4(link, quality = 360) {
         const downloadResult = await savetube(url, format, "video");
 
         if (!downloadResult.success) {
-            return { success: false, error: downloadResult.message };
+            return { 
+                success: false, 
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: downloadResult.message,
+                timestamp: new Date().toISOString()
+            };
         }
+
+        // Get detailed metadata
+        const metadataResult = await ytMetadata(url);
+        
+        const metadata = metadataResult.success ? {
+            videoId: metadataResult.videoId,
+            title: metadataResult.title,
+            description: metadataResult.description,
+            channelId: metadataResult.channelId,
+            channelTitle: metadataResult.channelTitle,
+            thumbnails: metadataResult.thumbnails,
+            tags: metadataResult.tags || [],
+            publishedAt: metadataResult.publishedAt,
+            publishedFormat: metadataResult.publishedFormat,
+            statistics: metadataResult.statistics,
+            duration: searchData?.duration?.timestamp || `${Math.floor(downloadResult.duration / 60)}:${downloadResult.duration % 60}`,
+            durationSeconds: searchData?.duration?.seconds || downloadResult.duration,
+            url: url
+        } : {
+            videoId: videoId,
+            title: searchData?.title || downloadResult.title,
+            description: searchData?.description || '',
+            channelTitle: searchData?.author?.name,
+            thumbnails: [
+                {
+                    quality: "high",
+                    url: searchData?.thumbnail || downloadResult.thumbnail,
+                    width: 480,
+                    height: 360
+                }
+            ],
+            tags: [],
+            publishedAt: searchData?.uploadedAt,
+            statistics: {
+                viewCount: searchData?.views || 0,
+                likeCount: 0,
+                commentCount: 0
+            },
+            duration: searchData?.duration?.timestamp || `${Math.floor(downloadResult.duration / 60)}:${downloadResult.duration % 60}`,
+            durationSeconds: searchData?.duration?.seconds || downloadResult.duration,
+            url: url
+        };
 
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-            metadata: {
-                videoId: videoId,
-                title: searchData?.title || downloadResult.title,
-                duration: searchData?.duration?.seconds || downloadResult.duration,
-                thumbnail: searchData?.thumbnail || downloadResult.thumbnail,
-                author: searchData?.author?.name,
-                views: searchData?.views,
-                uploaded: searchData?.uploadedAt,
-                url: url
-            },
+            timestamp: new Date().toISOString(),
+            metadata: metadata,
             download: {
                 quality: downloadResult.quality,
                 availableQuality: downloadResult.availableQuality,
@@ -193,7 +306,12 @@ async function ytmp4(link, quality = 360) {
         };
     } catch (error) {
         console.error("YTMP4 error:", error);
-        return { success: false, error: error.message };
+        return { 
+            success: false, 
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
@@ -238,6 +356,7 @@ async function youtubeSearch(query) {
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            timestamp: new Date().toISOString(),
             query: query,
             results: {
                 videos: videos,
@@ -253,7 +372,12 @@ async function youtubeSearch(query) {
         };
     } catch (error) {
         console.error("YouTube Search error:", error);
-        return { success: false, error: error.message };
+        return { 
+            success: false, 
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
@@ -262,7 +386,12 @@ async function ytMetadata(url) {
         const videoId = get_id(url);
 
         if (!videoId) {
-            return { success: false, error: 'Invalid YouTube URL' };
+            return { 
+                success: false, 
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: 'Invalid YouTube URL',
+                timestamp: new Date().toISOString()
+            };
         }
 
         const response = await axios.get('https://ytapi.apps.mattw.io/v3/videos', {
@@ -280,7 +409,12 @@ async function ytMetadata(url) {
         });
 
         if (response.data.items.length === 0) {
-            return { success: false, error: 'Video not found' };
+            return { 
+                success: false, 
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: 'Video not found',
+                timestamp: new Date().toISOString()
+            };
         }
 
         const snippet = response.data.items[0].snippet;
@@ -289,6 +423,7 @@ async function ytMetadata(url) {
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            timestamp: new Date().toISOString(),
             videoId: videoId,
             title: snippet.title,
             description: snippet.description,
@@ -306,7 +441,12 @@ async function ytMetadata(url) {
         };
     } catch (error) {
         console.error("Metadata error:", error);
-        return { success: false, error: error.message };
+        return { 
+            success: false, 
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
@@ -319,6 +459,7 @@ async function ytChannel(input) {
             return {
                 success: true,
                 creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                timestamp: new Date().toISOString(),
                 channelId: channel.channelId,
                 name: channel.name,
                 url: channel.url,
@@ -329,10 +470,20 @@ async function ytChannel(input) {
             };
         }
 
-        return { success: false, error: 'Channel not found. Try searching with @username format' };
+        return { 
+            success: false, 
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: 'Channel not found. Try searching with @username format',
+            timestamp: new Date().toISOString()
+        };
     } catch (error) {
         console.error("Channel error:", error);
-        return { success: false, error: error.message };
+        return { 
+            success: false, 
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
@@ -372,41 +523,12 @@ async function ytplaymp3(query, quality = 128) {
             };
         }
 
-        // Combine all metadata
-        const combinedMetadata = {
-            ...metadataResult.success ? {
-                videoId: metadataResult.videoId,
-                title: metadataResult.title,
-                description: metadataResult.description,
-                channelId: metadataResult.channelId,
-                channelTitle: metadataResult.channelTitle,
-                thumbnails: metadataResult.thumbnails,
-                tags: metadataResult.tags,
-                publishedAt: metadataResult.publishedAt,
-                publishedFormat: metadataResult.publishedFormat,
-                statistics: metadataResult.statistics
-            } : {
-                videoId: firstVideo.videoId,
-                title: firstVideo.title,
-                description: firstVideo.description,
-                channelTitle: firstVideo.author,
-                channelUrl: firstVideo.authorUrl,
-                publishedAt: firstVideo.uploaded,
-                views: firstVideo.views
-            },
-            duration: firstVideo.duration,
-            durationSeconds: firstVideo.durationSeconds,
-            thumbnail: firstVideo.thumbnail,
-            url: firstVideo.url,
-            searchQuery: query
-        };
-
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
             timestamp: new Date().toISOString(),
             query: query,
-            metadata: combinedMetadata,
+            metadata: downloadResult.metadata,
             download: {
                 quality: downloadResult.download.quality,
                 availableQuality: downloadResult.download.availableQuality,
@@ -456,41 +578,12 @@ async function ytplaymp4(query, quality = 360) {
             };
         }
 
-        // Combine all metadata
-        const combinedMetadata = {
-            ...metadataResult.success ? {
-                videoId: metadataResult.videoId,
-                title: metadataResult.title,
-                description: metadataResult.description,
-                channelId: metadataResult.channelId,
-                channelTitle: metadataResult.channelTitle,
-                thumbnails: metadataResult.thumbnails,
-                tags: metadataResult.tags,
-                publishedAt: metadataResult.publishedAt,
-                publishedFormat: metadataResult.publishedFormat,
-                statistics: metadataResult.statistics
-            } : {
-                videoId: firstVideo.videoId,
-                title: firstVideo.title,
-                description: firstVideo.description,
-                channelTitle: firstVideo.author,
-                channelUrl: firstVideo.authorUrl,
-                publishedAt: firstVideo.uploaded,
-                views: firstVideo.views
-            },
-            duration: firstVideo.duration,
-            durationSeconds: firstVideo.durationSeconds,
-            thumbnail: firstVideo.thumbnail,
-            url: firstVideo.url,
-            searchQuery: query
-        };
-
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
             timestamp: new Date().toISOString(),
             query: query,
-            metadata: combinedMetadata,
+            metadata: downloadResult.metadata,
             download: {
                 quality: downloadResult.download.quality,
                 availableQuality: downloadResult.download.availableQuality,
@@ -514,11 +607,12 @@ async function ytplaymp4(query, quality = 360) {
 
 // Root endpoint
 app.get('/', (req, res) => {
-    res.json({
+    const data = {
         status: true,
         message: 'YouTube Downloader & Search API',
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
         version: '3.1.0',
+        timestamp: new Date().toISOString(),
         endpoints: {
             download: {
                 audio: '/api/v1/download/youtube/audio?url=URL&quality=128',
@@ -539,19 +633,21 @@ app.get('/', (req, res) => {
             audio: [92, 128, 256, 320],
             video: [144, 360, 480, 720, 1080]
         }
-    });
+    };
+    formatJsonResponse(res, data);
 });
 
 // API Status
 app.get('/api/v1/status', (req, res) => {
-    res.json({
+    const data = {
         status: true,
         message: 'API is running',
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
         timestamp: new Date().toISOString(),
         serverTime: format_date(new Date()),
         version: '3.1.0'
-    });
+    };
+    formatJsonResponse(res, data);
 });
 
 // ===============================
@@ -564,25 +660,22 @@ app.get('/api/v1/download/youtube/audio', async (req, res) => {
         const { url, quality = 128 } = req.query;
 
         if (!url) {
-            return res.status(400).json({
-                success: false,
-                message: 'Parameter url is required',
+            return errorResponse(res, 400, 'Parameter url is required', {
                 example: '/api/v1/download/youtube/audio?url=https://youtube.com/watch?v=dQw4w9WgXcQ&quality=128'
             });
         }
 
         const result = await ytmp3(url, parseInt(quality));
+        
         if (!result.success) {
-            return res.status(400).json(result);
+            formatJsonResponse(res, result, 400);
+            return;
         }
 
-        res.json(result);
+        formatJsonResponse(res, result);
     } catch (error) {
         console.error('Audio endpoint error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
+        errorResponse(res, 500, 'Internal server error');
     }
 });
 
@@ -592,25 +685,22 @@ app.get('/api/v1/download/youtube/video', async (req, res) => {
         const { url, quality = 360 } = req.query;
 
         if (!url) {
-            return res.status(400).json({
-                success: false,
-                message: 'Parameter url is required',
+            return errorResponse(res, 400, 'Parameter url is required', {
                 example: '/api/v1/download/youtube/video?url=https://youtube.com/watch?v=dQw4w9WgXcQ&quality=720'
             });
         }
 
         const result = await ytmp4(url, parseInt(quality));
+        
         if (!result.success) {
-            return res.status(400).json(result);
+            formatJsonResponse(res, result, 400);
+            return;
         }
 
-        res.json(result);
+        formatJsonResponse(res, result);
     } catch (error) {
         console.error('Video endpoint error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
+        errorResponse(res, 500, 'Internal server error');
     }
 });
 
@@ -620,28 +710,22 @@ app.get('/api/v1/play/youtube/audio', async (req, res) => {
         const { q, quality = 128 } = req.query;
 
         if (!q) {
-            return res.status(400).json({
-                success: false,
-                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-                message: 'Parameter q is required',
+            return errorResponse(res, 400, 'Parameter q is required', {
                 example: '/api/v1/play/youtube/audio?q=music&quality=128'
             });
         }
 
         const result = await ytplaymp3(q, parseInt(quality));
+        
         if (!result.success) {
-            return res.status(400).json(result);
+            formatJsonResponse(res, result, 400);
+            return;
         }
 
-        res.json(result);
+        formatJsonResponse(res, result);
     } catch (error) {
         console.error('Play audio endpoint error:', error);
-        res.status(500).json({
-            success: false,
-            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-            message: 'Internal server error',
-            timestamp: new Date().toISOString()
-        });
+        errorResponse(res, 500, 'Internal server error');
     }
 });
 
@@ -651,28 +735,22 @@ app.get('/api/v1/play/youtube/video', async (req, res) => {
         const { q, quality = 360 } = req.query;
 
         if (!q) {
-            return res.status(400).json({
-                success: false,
-                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-                message: 'Parameter q is required',
+            return errorResponse(res, 400, 'Parameter q is required', {
                 example: '/api/v1/play/youtube/video?q=tutorial&quality=720'
             });
         }
 
         const result = await ytplaymp4(q, parseInt(quality));
+        
         if (!result.success) {
-            return res.status(400).json(result);
+            formatJsonResponse(res, result, 400);
+            return;
         }
 
-        res.json(result);
+        formatJsonResponse(res, result);
     } catch (error) {
         console.error('Play video endpoint error:', error);
-        res.status(500).json({
-            success: false,
-            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-            message: 'Internal server error',
-            timestamp: new Date().toISOString()
-        });
+        errorResponse(res, 500, 'Internal server error');
     }
 });
 
@@ -686,25 +764,22 @@ app.get('/api/v1/search/youtube-search', async (req, res) => {
         const { query } = req.query;
 
         if (!query) {
-            return res.status(400).json({
-                success: false,
-                message: 'Parameter query is required',
+            return errorResponse(res, 400, 'Parameter query is required', {
                 example: '/api/v1/search/youtube-search?query=music'
             });
         }
 
         const result = await youtubeSearch(query);
+        
         if (!result.success) {
-            return res.status(400).json(result);
+            formatJsonResponse(res, result, 400);
+            return;
         }
 
-        res.json(result);
+        formatJsonResponse(res, result);
     } catch (error) {
         console.error('YouTube Search endpoint error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
+        errorResponse(res, 500, 'Internal server error');
     }
 });
 
@@ -714,25 +789,22 @@ app.get('/api/v1/search/metadata', async (req, res) => {
         const { url } = req.query;
 
         if (!url) {
-            return res.status(400).json({
-                success: false,
-                message: 'Parameter url is required',
+            return errorResponse(res, 400, 'Parameter url is required', {
                 example: '/api/v1/search/metadata?url=https://youtube.com/watch?v=dQw4w9WgXcQ'
             });
         }
 
         const result = await ytMetadata(url);
+        
         if (!result.success) {
-            return res.status(400).json(result);
+            formatJsonResponse(res, result, 400);
+            return;
         }
 
-        res.json(result);
+        formatJsonResponse(res, result);
     } catch (error) {
         console.error('Metadata endpoint error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
+        errorResponse(res, 500, 'Internal server error');
     }
 });
 
@@ -742,25 +814,22 @@ app.get('/api/v1/search/channel', async (req, res) => {
         const { query } = req.query;
 
         if (!query) {
-            return res.status(400).json({
-                success: false,
-                message: 'Parameter query is required',
+            return errorResponse(res, 400, 'Parameter query is required', {
                 example: '/api/v1/search/channel?query=@MrBeast'
             });
         }
 
         const result = await ytChannel(query);
+        
         if (!result.success) {
-            return res.status(400).json(result);
+            formatJsonResponse(res, result, 400);
+            return;
         }
 
-        res.json(result);
+        formatJsonResponse(res, result);
     } catch (error) {
         console.error('Channel endpoint error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
+        errorResponse(res, 500, 'Internal server error');
     }
 });
 
@@ -770,30 +839,35 @@ app.get('/api/v1/search/channel', async (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-    res.json({
+    const data = {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
-        creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡'
-    });
+        creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+        version: '3.1.0'
+    };
+    formatJsonResponse(res, data);
 });
 
 // Test endpoint
 app.get('/api/test', (req, res) => {
-    res.json({
+    const data = {
         success: true,
         message: 'API is working!',
         timestamp: new Date().toISOString(),
-        creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡'
-    });
+        creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+        version: '3.1.0'
+    };
+    formatJsonResponse(res, data);
 });
 
 // 404 Handler
 app.use((req, res) => {
-    res.status(404).json({
+    const data = {
         success: false,
         message: 'Endpoint not found',
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+        timestamp: new Date().toISOString(),
         availableEndpoints: [
             '/',
             '/api/v1/download/youtube/audio',
@@ -807,17 +881,20 @@ app.use((req, res) => {
             '/api/health',
             '/api/test'
         ]
-    });
+    };
+    formatJsonResponse(res, data, 404);
 });
 
 // Error handler
 app.use((err, req, res, next) => {
     console.error('Server error:', err.message);
-    res.status(500).json({
+    const data = {
         success: false,
         message: 'Internal server error',
-        creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡'
-    });
+        creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+        timestamp: new Date().toISOString()
+    };
+    formatJsonResponse(res, data, 500);
 });
 
 module.exports = (req, res) => {
