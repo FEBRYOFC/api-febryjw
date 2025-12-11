@@ -1,5 +1,5 @@
 // =========================
-//       IMPORT MODULE
+// IMPORT MODULE
 // =========================
 const express = require("express");
 const cors = require("cors");
@@ -16,7 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 // HELPER FUNCTIONS
 // ===============================
 function get_id(url) {
-    const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|v\/|embed\/|user\/[^\/\n\s]+\/)?(?:watch\?v=|v%3D|embed%2F|video%2F)?|youtu\.be\/|youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/|youtube\.com\/playlist\?list=)([a-zA-Z0-9_-]{11})/;
+    const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^/\n\s]+\/\S+\/|v\/|embed\/|user\/[^/\n\s]+\/)?(?:watch\?v=|v%3D|embed%2F|video%2F)?|youtu\.be\/|youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/|youtube\.com\/playlist\?list=)([a-zA-Z0-9_-]{11})/;
     const match = url.match(regex);
     return match ? match[1] : null;
 }
@@ -60,7 +60,6 @@ const decode = (enc) => {
 
         const decipher = createDecipheriv('aes-128-cbc', key, iv);
         let decrypted = Buffer.concat([decipher.update(content), decipher.final()]);
-
         return JSON.parse(decrypted.toString());
     } catch (error) {
         return { error: true, message: "Decode failed: " + error.message };
@@ -71,18 +70,16 @@ async function savetube(link, quality, value) {
     try {
         const cdnResponse = await axios.get("https://media.savetube.me/api/random-cdn");
         const cdn = cdnResponse.data.cdn;
-        
-        const infoget = await axios.post(`https://${cdn}/v2/info`, {
-            'url': link
-        }, {
+
+        const infoget = await axios.post(`https://${cdn}/v2/info`, { 'url': link }, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36',
                 'Referer': 'https://yt.savetube.me/1kejjj1?id=362796039'
             }
         });
-        
+
         const info = decode(infoget.data.data);
-        
+
         const response = await axios.post(`https://${cdn}/download`, {
             'downloadType': value,
             'quality': `${quality}`,
@@ -94,7 +91,7 @@ async function savetube(link, quality, value) {
                 'Referer': 'https://yt.savetube.me/start-download?from=1kejjj1%3Fid%3D362796039'
             }
         });
-        
+
         return {
             success: true,
             quality: `${quality}${value === "audio" ? "kbps" : "p"}`,
@@ -108,10 +105,7 @@ async function savetube(link, quality, value) {
         };
     } catch (error) {
         console.error("Savetube error:", error.message);
-        return {
-            success: false,
-            message: "Converting error: " + error.message
-        };
+        return { success: false, message: "Converting error: " + error.message };
     }
 }
 
@@ -123,19 +117,19 @@ async function ytmp3(link, quality = 128) {
     try {
         const videoId = get_id(link);
         const format = audio.includes(Number(quality)) ? Number(quality) : 128;
-        
+
         if (!videoId) {
             return { success: false, error: 'Invalid YouTube URL' };
         }
-        
+
         const url = `https://youtube.com/watch?v=${videoId}`;
         const searchData = await yts({ videoId });
         const downloadResult = await savetube(url, format, "audio");
-        
+
         if (!downloadResult.success) {
             return { success: false, error: downloadResult.message };
         }
-        
+
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
@@ -149,7 +143,11 @@ async function ytmp3(link, quality = 128) {
                 uploaded: searchData?.uploadedAt,
                 url: url
             },
-            download: downloadResult
+            download: {
+                quality: downloadResult.quality,
+                availableQuality: downloadResult.availableQuality,
+                url: downloadResult.url
+            }
         };
     } catch (error) {
         console.error("YTMP3 error:", error);
@@ -161,19 +159,19 @@ async function ytmp4(link, quality = 360) {
     try {
         const videoId = get_id(link);
         const format = video.includes(Number(quality)) ? Number(quality) : 360;
-        
+
         if (!videoId) {
             return { success: false, error: 'Invalid YouTube URL' };
         }
-        
+
         const url = `https://youtube.com/watch?v=${videoId}`;
         const searchData = await yts({ videoId });
         const downloadResult = await savetube(url, format, "video");
-        
+
         if (!downloadResult.success) {
             return { success: false, error: downloadResult.message };
         }
-        
+
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
@@ -187,7 +185,11 @@ async function ytmp4(link, quality = 360) {
                 uploaded: searchData?.uploadedAt,
                 url: url
             },
-            download: downloadResult
+            download: {
+                quality: downloadResult.quality,
+                availableQuality: downloadResult.availableQuality,
+                url: downloadResult.url
+            }
         };
     } catch (error) {
         console.error("YTMP4 error:", error);
@@ -199,8 +201,7 @@ async function ytmp4(link, quality = 360) {
 async function youtubeSearch(query) {
     try {
         const searchResults = await yts(query);
-        
-        // Format videos
+
         const videos = searchResults.videos.map(video => ({
             videoId: video.videoId,
             title: video.title,
@@ -214,8 +215,7 @@ async function youtubeSearch(query) {
             uploaded: video.uploadedAt,
             description: video.description
         }));
-        
-        // Format playlists if available
+
         const playlists = searchResults.playlists ? searchResults.playlists.map(playlist => ({
             playlistId: playlist.playlistId,
             title: playlist.title,
@@ -224,8 +224,7 @@ async function youtubeSearch(query) {
             author: playlist.author.name,
             videoCount: playlist.videoCount
         })) : [];
-        
-        // Format channels if available
+
         const channels = searchResults.channels ? searchResults.channels.map(channel => ({
             channelId: channel.channelId,
             name: channel.name,
@@ -235,7 +234,7 @@ async function youtubeSearch(query) {
             videoCount: channel.videoCount,
             subscriberCount: channel.subscriberCount
         })) : [];
-        
+
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
@@ -261,11 +260,11 @@ async function youtubeSearch(query) {
 async function ytMetadata(url) {
     try {
         const videoId = get_id(url);
-        
+
         if (!videoId) {
             return { success: false, error: 'Invalid YouTube URL' };
         }
-        
+
         const response = await axios.get('https://ytapi.apps.mattw.io/v3/videos', {
             params: {
                 'key': 'foo1',
@@ -279,14 +278,14 @@ async function ytMetadata(url) {
                 'Referer': 'https://mattw.io/youtube-metadata/'
             }
         });
-        
+
         if (response.data.items.length === 0) {
             return { success: false, error: 'Video not found' };
         }
-        
+
         const snippet = response.data.items[0].snippet;
         const statistics = response.data.items[0].statistics;
-        
+
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
@@ -295,10 +294,7 @@ async function ytMetadata(url) {
             description: snippet.description,
             channelId: snippet.channelId,
             channelTitle: snippet.channelTitle,
-            thumbnails: Object.entries(snippet.thumbnails).map(([quality, data]) => ({
-                quality,
-                ...data
-            })),
+            thumbnails: Object.entries(snippet.thumbnails).map(([quality, data]) => ({ quality, ...data })),
             tags: snippet.tags || [],
             publishedAt: snippet.publishedAt,
             publishedFormat: format_date(snippet.publishedAt),
@@ -317,7 +313,7 @@ async function ytMetadata(url) {
 async function ytChannel(input) {
     try {
         const searchResults = await yts(input);
-        
+
         if (searchResults.channels && searchResults.channels.length > 0) {
             const channel = searchResults.channels[0];
             return {
@@ -332,11 +328,8 @@ async function ytChannel(input) {
                 subscriberCount: channel.subscriberCount
             };
         }
-        
-        return {
-            success: false,
-            error: 'Channel not found. Try searching with @username format'
-        };
+
+        return { success: false, error: 'Channel not found. Try searching with @username format' };
     } catch (error) {
         console.error("Channel error:", error);
         return { success: false, error: error.message };
@@ -344,43 +337,90 @@ async function ytChannel(input) {
 }
 
 // ===============================
-// COMBO FUNCTIONS (Search + Download)
+// COMBO FUNCTIONS (Search + Download) - REVISED STRUCTURE
 // ===============================
 
 async function ytplaymp3(query, quality = 128) {
     try {
         // Step 1: Search for videos
         const searchResult = await youtubeSearch(query);
-        
+
         if (!searchResult.success || searchResult.results.videos.length === 0) {
-            return { success: false, error: 'No videos found for query: ' + query };
+            return {
+                success: false,
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: 'No videos found for query: ' + query,
+                timestamp: new Date().toISOString()
+            };
         }
-        
+
         // Step 2: Get first video
         const firstVideo = searchResult.results.videos[0];
         
-        // Step 3: Download as MP3
+        // Step 3: Get detailed metadata
+        const metadataResult = await ytMetadata(firstVideo.url);
+        
+        // Step 4: Download as MP3
         const downloadResult = await ytmp3(firstVideo.url, quality);
-        
+
         if (!downloadResult.success) {
-            return { success: false, error: downloadResult.error };
+            return {
+                success: false,
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: downloadResult.error,
+                timestamp: new Date().toISOString()
+            };
         }
-        
+
+        // Combine all metadata
+        const combinedMetadata = {
+            ...metadataResult.success ? {
+                videoId: metadataResult.videoId,
+                title: metadataResult.title,
+                description: metadataResult.description,
+                channelId: metadataResult.channelId,
+                channelTitle: metadataResult.channelTitle,
+                thumbnails: metadataResult.thumbnails,
+                tags: metadataResult.tags,
+                publishedAt: metadataResult.publishedAt,
+                publishedFormat: metadataResult.publishedFormat,
+                statistics: metadataResult.statistics
+            } : {
+                videoId: firstVideo.videoId,
+                title: firstVideo.title,
+                description: firstVideo.description,
+                channelTitle: firstVideo.author,
+                channelUrl: firstVideo.authorUrl,
+                publishedAt: firstVideo.uploaded,
+                views: firstVideo.views
+            },
+            duration: firstVideo.duration,
+            durationSeconds: firstVideo.durationSeconds,
+            thumbnail: firstVideo.thumbnail,
+            url: firstVideo.url,
+            searchQuery: query
+        };
+
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            timestamp: new Date().toISOString(),
             query: query,
-            searchResult: {
-                query: searchResult.query,
-                videoCount: searchResult.counts.videos
-            },
-            video: firstVideo,
-            download: downloadResult.download,
-            metadata: downloadResult.metadata
+            metadata: combinedMetadata,
+            download: {
+                quality: downloadResult.download.quality,
+                availableQuality: downloadResult.download.availableQuality,
+                url: downloadResult.download.url
+            }
         };
     } catch (error) {
         console.error("Ytplaymp3 error:", error);
-        return { success: false, error: error.message };
+        return {
+            success: false,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
@@ -388,36 +428,83 @@ async function ytplaymp4(query, quality = 360) {
     try {
         // Step 1: Search for videos
         const searchResult = await youtubeSearch(query);
-        
+
         if (!searchResult.success || searchResult.results.videos.length === 0) {
-            return { success: false, error: 'No videos found for query: ' + query };
+            return {
+                success: false,
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: 'No videos found for query: ' + query,
+                timestamp: new Date().toISOString()
+            };
         }
-        
+
         // Step 2: Get first video
         const firstVideo = searchResult.results.videos[0];
         
-        // Step 3: Download as MP4
+        // Step 3: Get detailed metadata
+        const metadataResult = await ytMetadata(firstVideo.url);
+        
+        // Step 4: Download as MP4
         const downloadResult = await ytmp4(firstVideo.url, quality);
-        
+
         if (!downloadResult.success) {
-            return { success: false, error: downloadResult.error };
+            return {
+                success: false,
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                error: downloadResult.error,
+                timestamp: new Date().toISOString()
+            };
         }
-        
+
+        // Combine all metadata
+        const combinedMetadata = {
+            ...metadataResult.success ? {
+                videoId: metadataResult.videoId,
+                title: metadataResult.title,
+                description: metadataResult.description,
+                channelId: metadataResult.channelId,
+                channelTitle: metadataResult.channelTitle,
+                thumbnails: metadataResult.thumbnails,
+                tags: metadataResult.tags,
+                publishedAt: metadataResult.publishedAt,
+                publishedFormat: metadataResult.publishedFormat,
+                statistics: metadataResult.statistics
+            } : {
+                videoId: firstVideo.videoId,
+                title: firstVideo.title,
+                description: firstVideo.description,
+                channelTitle: firstVideo.author,
+                channelUrl: firstVideo.authorUrl,
+                publishedAt: firstVideo.uploaded,
+                views: firstVideo.views
+            },
+            duration: firstVideo.duration,
+            durationSeconds: firstVideo.durationSeconds,
+            thumbnail: firstVideo.thumbnail,
+            url: firstVideo.url,
+            searchQuery: query
+        };
+
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            timestamp: new Date().toISOString(),
             query: query,
-            searchResult: {
-                query: searchResult.query,
-                videoCount: searchResult.counts.videos
-            },
-            video: firstVideo,
-            download: downloadResult.download,
-            metadata: downloadResult.metadata
+            metadata: combinedMetadata,
+            download: {
+                quality: downloadResult.download.quality,
+                availableQuality: downloadResult.download.availableQuality,
+                url: downloadResult.download.url
+            }
         };
     } catch (error) {
         console.error("Ytplaymp4 error:", error);
-        return { success: false, error: error.message };
+        return {
+            success: false,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
@@ -475,7 +562,7 @@ app.get('/api/v1/status', (req, res) => {
 app.get('/api/v1/download/youtube/audio', async (req, res) => {
     try {
         const { url, quality = 128 } = req.query;
-        
+
         if (!url) {
             return res.status(400).json({
                 success: false,
@@ -483,13 +570,12 @@ app.get('/api/v1/download/youtube/audio', async (req, res) => {
                 example: '/api/v1/download/youtube/audio?url=https://youtube.com/watch?v=dQw4w9WgXcQ&quality=128'
             });
         }
-        
+
         const result = await ytmp3(url, parseInt(quality));
-        
         if (!result.success) {
             return res.status(400).json(result);
         }
-        
+
         res.json(result);
     } catch (error) {
         console.error('Audio endpoint error:', error);
@@ -504,7 +590,7 @@ app.get('/api/v1/download/youtube/audio', async (req, res) => {
 app.get('/api/v1/download/youtube/video', async (req, res) => {
     try {
         const { url, quality = 360 } = req.query;
-        
+
         if (!url) {
             return res.status(400).json({
                 success: false,
@@ -512,13 +598,12 @@ app.get('/api/v1/download/youtube/video', async (req, res) => {
                 example: '/api/v1/download/youtube/video?url=https://youtube.com/watch?v=dQw4w9WgXcQ&quality=720'
             });
         }
-        
+
         const result = await ytmp4(url, parseInt(quality));
-        
         if (!result.success) {
             return res.status(400).json(result);
         }
-        
+
         res.json(result);
     } catch (error) {
         console.error('Video endpoint error:', error);
@@ -533,27 +618,29 @@ app.get('/api/v1/download/youtube/video', async (req, res) => {
 app.get('/api/v1/play/youtube/audio', async (req, res) => {
     try {
         const { q, quality = 128 } = req.query;
-        
+
         if (!q) {
             return res.status(400).json({
                 success: false,
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
                 message: 'Parameter q is required',
                 example: '/api/v1/play/youtube/audio?q=music&quality=128'
             });
         }
-        
+
         const result = await ytplaymp3(q, parseInt(quality));
-        
         if (!result.success) {
             return res.status(400).json(result);
         }
-        
+
         res.json(result);
     } catch (error) {
         console.error('Play audio endpoint error:', error);
         res.status(500).json({
             success: false,
-            message: 'Internal server error'
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            message: 'Internal server error',
+            timestamp: new Date().toISOString()
         });
     }
 });
@@ -562,27 +649,29 @@ app.get('/api/v1/play/youtube/audio', async (req, res) => {
 app.get('/api/v1/play/youtube/video', async (req, res) => {
     try {
         const { q, quality = 360 } = req.query;
-        
+
         if (!q) {
             return res.status(400).json({
                 success: false,
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
                 message: 'Parameter q is required',
                 example: '/api/v1/play/youtube/video?q=tutorial&quality=720'
             });
         }
-        
+
         const result = await ytplaymp4(q, parseInt(quality));
-        
         if (!result.success) {
             return res.status(400).json(result);
         }
-        
+
         res.json(result);
     } catch (error) {
         console.error('Play video endpoint error:', error);
         res.status(500).json({
             success: false,
-            message: 'Internal server error'
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            message: 'Internal server error',
+            timestamp: new Date().toISOString()
         });
     }
 });
@@ -595,7 +684,7 @@ app.get('/api/v1/play/youtube/video', async (req, res) => {
 app.get('/api/v1/search/youtube-search', async (req, res) => {
     try {
         const { query } = req.query;
-        
+
         if (!query) {
             return res.status(400).json({
                 success: false,
@@ -603,13 +692,12 @@ app.get('/api/v1/search/youtube-search', async (req, res) => {
                 example: '/api/v1/search/youtube-search?query=music'
             });
         }
-        
+
         const result = await youtubeSearch(query);
-        
         if (!result.success) {
             return res.status(400).json(result);
         }
-        
+
         res.json(result);
     } catch (error) {
         console.error('YouTube Search endpoint error:', error);
@@ -624,7 +712,7 @@ app.get('/api/v1/search/youtube-search', async (req, res) => {
 app.get('/api/v1/search/metadata', async (req, res) => {
     try {
         const { url } = req.query;
-        
+
         if (!url) {
             return res.status(400).json({
                 success: false,
@@ -632,13 +720,12 @@ app.get('/api/v1/search/metadata', async (req, res) => {
                 example: '/api/v1/search/metadata?url=https://youtube.com/watch?v=dQw4w9WgXcQ'
             });
         }
-        
+
         const result = await ytMetadata(url);
-        
         if (!result.success) {
             return res.status(400).json(result);
         }
-        
+
         res.json(result);
     } catch (error) {
         console.error('Metadata endpoint error:', error);
@@ -653,7 +740,7 @@ app.get('/api/v1/search/metadata', async (req, res) => {
 app.get('/api/v1/search/channel', async (req, res) => {
     try {
         const { query } = req.query;
-        
+
         if (!query) {
             return res.status(400).json({
                 success: false,
@@ -661,13 +748,12 @@ app.get('/api/v1/search/channel', async (req, res) => {
                 example: '/api/v1/search/channel?query=@MrBeast'
             });
         }
-        
+
         const result = await ytChannel(query);
-        
         if (!result.success) {
             return res.status(400).json(result);
         }
-        
+
         res.json(result);
     } catch (error) {
         console.error('Channel endpoint error:', error);
