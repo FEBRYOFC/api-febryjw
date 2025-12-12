@@ -805,7 +805,7 @@ async function ytChannel(input) {
 }
 
 // ===============================
-// COMBO FUNCTIONS (Search + Download) - REVISED STRUCTURE
+// COMBO FUNCTIONS (Search + Download) - REVISED STRUCTURE - DIPERBAIKI
 // ===============================
 
 async function ytplaymp3(query, quality = 128) {
@@ -825,7 +825,7 @@ async function ytplaymp3(query, quality = 128) {
         // Step 2: Get first video
         const firstVideo = searchResult.results.videos[0];
         
-        // Step 3: Get detailed metadata
+        // Step 3: Get detailed metadata (DENGAN FIELD YANG DIMINTA)
         const metadataResult = await ytMetadata(firstVideo.url);
         
         // Step 4: Download as MP3
@@ -840,12 +840,45 @@ async function ytplaymp3(query, quality = 128) {
             };
         }
 
+        // Metadata dengan field yang diminta
+        const simplifiedMetadata = metadataResult.success ? {
+            videoId: metadataResult.videoId,               // ✅
+            title: metadataResult.title,                   // ✅
+            description: metadataResult.description,       // ✅ DITAMBAHKAN
+            channelTitle: metadataResult.channelTitle,     // ✅
+            thumbnail: metadataResult.thumbnails?.find(t => t.quality === "high")?.url || 
+                      metadataResult.thumbnails?.[0]?.url, // ✅ DITAMBAHKAN
+            url: firstVideo.url,                           // ✅ DITAMBAHKAN
+            publishedAt: metadataResult.publishedAt,       // ✅ DITAMBAHKAN
+            publishedFormat: metadataResult.publishedFormat, // ✅
+            duration: firstVideo.duration,                 // ✅
+            statistics: {
+                viewCount: metadataResult.statistics.viewCount, // ✅
+                likeCount: metadataResult.statistics.likeCount,  // ✅
+                commentCount: metadataResult.statistics.commentCount // ✅ DITAMBAHKAN
+            }
+        } : {
+            videoId: firstVideo.videoId,                   // ✅
+            title: firstVideo.title,                       // ✅
+            description: firstVideo.description || '',     // ✅ DITAMBAHKAN
+            channelTitle: firstVideo.author,               // ✅
+            thumbnail: firstVideo.thumbnail,               // ✅ DITAMBAHKAN
+            url: firstVideo.url,                           // ✅ DITAMBAHKAN
+            publishedAt: firstVideo.uploaded,              // ✅ DITAMBAHKAN
+            duration: firstVideo.duration,                 // ✅
+            statistics: {
+                viewCount: firstVideo.views,               // ✅
+                likeCount: 0,                              // ✅
+                commentCount: 0                            // ✅ DITAMBAHKAN
+            }
+        };
+
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
             timestamp: new Date().toISOString(),
             query: query,
-            metadata: downloadResult.metadata,
+            metadata: simplifiedMetadata,
             download: {
                 quality: downloadResult.download.quality,
                 availableQuality: downloadResult.download.availableQuality,
@@ -880,7 +913,7 @@ async function ytplaymp4(query, quality = 360) {
         // Step 2: Get first video
         const firstVideo = searchResult.results.videos[0];
         
-        // Step 3: Get detailed metadata
+        // Step 3: Get detailed metadata (DENGAN FIELD YANG DIMINTA)
         const metadataResult = await ytMetadata(firstVideo.url);
         
         // Step 4: Download as MP4
@@ -895,12 +928,45 @@ async function ytplaymp4(query, quality = 360) {
             };
         }
 
+        // Metadata dengan field yang diminta
+        const simplifiedMetadata = metadataResult.success ? {
+            videoId: metadataResult.videoId,               // ✅
+            title: metadataResult.title,                   // ✅
+            description: metadataResult.description,       // ✅ DITAMBAHKAN
+            channelTitle: metadataResult.channelTitle,     // ✅
+            thumbnail: metadataResult.thumbnails?.find(t => t.quality === "high")?.url || 
+                      metadataResult.thumbnails?.[0]?.url, // ✅ DITAMBAHKAN
+            url: firstVideo.url,                           // ✅ DITAMBAHKAN
+            publishedAt: metadataResult.publishedAt,       // ✅ DITAMBAHKAN
+            publishedFormat: metadataResult.publishedFormat, // ✅
+            duration: firstVideo.duration,                 // ✅
+            statistics: {
+                viewCount: metadataResult.statistics.viewCount, // ✅
+                likeCount: metadataResult.statistics.likeCount,  // ✅
+                commentCount: metadataResult.statistics.commentCount // ✅ DITAMBAHKAN
+            }
+        } : {
+            videoId: firstVideo.videoId,                   // ✅
+            title: firstVideo.title,                       // ✅
+            description: firstVideo.description || '',     // ✅ DITAMBAHKAN
+            channelTitle: firstVideo.author,               // ✅
+            thumbnail: firstVideo.thumbnail,               // ✅ DITAMBAHKAN
+            url: firstVideo.url,                           // ✅ DITAMBAHKAN
+            publishedAt: firstVideo.uploaded,              // ✅ DITAMBAHKAN
+            duration: firstVideo.duration,                 // ✅
+            statistics: {
+                viewCount: firstVideo.views,               // ✅
+                likeCount: 0,                              // ✅
+                commentCount: 0                            // ✅ DITAMBAHKAN
+            }
+        };
+
         return {
             success: true,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
             timestamp: new Date().toISOString(),
             query: query,
-            metadata: downloadResult.metadata,
+            metadata: simplifiedMetadata,
             download: {
                 quality: downloadResult.download.quality,
                 availableQuality: downloadResult.download.availableQuality,
