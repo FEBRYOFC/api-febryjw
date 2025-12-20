@@ -6,7 +6,13 @@ const cors = require("cors");
 const axios = require("axios");
 const { createDecipheriv } = require("crypto");
 const yts = require("yt-search");
+const fs = require("fs");
+const FormData = require("form-data");
+const multer = require("multer");
 const app = express();
+
+// Multer setup
+const upload = multer({ dest: 'uploads/' });
 
 app.use(cors());
 app.use(express.json());
@@ -444,6 +450,56 @@ async function tiktokSearchVideo(query) {
             });
         }
     });
+}
+
+// ===============================
+// TOP4TOP FUNCTION
+// ===============================
+
+async function top4top(filePath) {
+    try {
+        const f = new FormData();
+        f.append('file_0_', fs.createReadStream(filePath), filePath.split('/').pop());
+        f.append('submitr', '[ رفع الملفات ]');
+
+        const html = await axios.post(
+            'https://top4top.io/index.php',
+            f,
+            {
+                headers: {
+                    ...f.getHeaders(),
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
+                    'Accept': 'text/html'
+                }
+            }
+        ).then(res => res.data).catch(() => null);
+
+        if (!html) return { status: false };
+
+        const get = (re) => {
+            const m = html.match(re);
+            return m ? m[1] : null;
+        };
+
+        const result =
+            get(/value="(https:\/\/[a-z]\.top4top\.io\/m_[^"]+)"/) ||
+            get(/https:\/\/[a-z]\.top4top\.io\/m_[^"]+/) ||
+            get(/value="(https:\/\/[a-z]\.top4top\.io\/p_[^"]+)"/) ||
+            get(/https:\/\/[a-z]\.top4top\.io\/p_[^"]+/);
+
+        const del =
+            get(/value="(https:\/\/top4top\.io\/del[^"]+)"/) ||
+            get(/https:\/\/top4top\.io\/del[^"]+/);
+
+        return {
+            status: true,
+            result,
+            delete: del
+        };
+    } catch (error) {
+        console.error("Top4Top error:", error);
+        return { status: false, error: error.message };
+    }
 }
 
 // ===============================
@@ -994,7 +1050,7 @@ app.get('/', (req, res) => {
         status: true,
         message: 'YouTube & TikTok Downloader & Search API',
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-        version: '3.3.0',
+        version: '3.4.0',
         timestamp: new Date().toISOString(),
         endpoints: {
             download: {
@@ -1012,6 +1068,9 @@ app.get('/', (req, res) => {
                 tiktok: '/api/v1/search/tiktok-search?query=SEARCH_QUERY',
                 metadata: '/api/v1/search/metadata?url=VIDEO_URL',
                 channel: '/api/v1/search/channel?query=CHANNEL_QUERY'
+            },
+            tools: {
+                top4top: 'POST /api/v1/tools/top4top (form-data: file)'
             },
             status: '/api/v1/status'
         },
@@ -1031,9 +1090,54 @@ app.get('/api/v1/status', (req, res) => {
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
         timestamp: new Date().toISOString(),
         serverTime: format_date(new Date()),
-        version: '3.3.0'
+        version: '3.4.0'
     };
     formatJsonResponse(res, data);
+});
+
+// ===============================
+// TOP4TOP ENDPOINT
+// ===============================
+
+app.post('/api/v1/tools/top4top', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return errorResponse(res, 400, 'File tidak ditemukan', {
+                example: 'Gunakan form-data dengan key "file"'
+            });
+        }
+
+        const data = await top4top(req.file.path);
+
+        // Hapus file setelah upload
+        try {
+            fs.unlinkSync(req.file.path);
+        } catch (cleanupError) {
+            console.error('Cleanup error:', cleanupError);
+        }
+
+        if (!data.status) {
+            return formatJsonResponse(res, {
+                success: false,
+                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+                message: 'Upload gagal ke Top4Top',
+                error: data.error || 'Unknown error',
+                timestamp: new Date().toISOString()
+            }, 500);
+        }
+
+        formatJsonResponse(res, {
+            success: true,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            message: 'File berhasil diupload ke Top4Top',
+            result: data.result,
+            delete: data.delete,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Top4Top endpoint error:', error);
+        errorResponse(res, 500, 'Internal server error', { error: error.message });
+    }
 });
 
 // ===============================
@@ -1304,7 +1408,7 @@ app.get('/api/health', (req, res) => {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-        version: '3.3.0'
+        version: '3.4.0'
     };
     formatJsonResponse(res, data);
 });
@@ -1316,7 +1420,7 @@ app.get('/api/test', (req, res) => {
         message: 'API is working!',
         timestamp: new Date().toISOString(),
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-        version: '3.3.0'
+        version: '3.4.0'
     };
     formatJsonResponse(res, data);
 });
@@ -1340,6 +1444,7 @@ app.use((req, res) => {
             '/api/v1/search/tiktok-search',
             '/api/v1/search/metadata',
             '/api/v1/search/channel',
+            '/api/v1/tools/top4top',
             '/api/v1/status',
             '/api/health',
             '/api/test'
