@@ -12,7 +12,10 @@ const multer = require("multer");
 const app = express();
 
 // Multer setup
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+});
 
 app.use(cors());
 app.use(express.json());
@@ -450,56 +453,6 @@ async function tiktokSearchVideo(query) {
             });
         }
     });
-}
-
-// ===============================
-// TOP4TOP FUNCTION
-// ===============================
-
-async function top4top(filePath) {
-    try {
-        const f = new FormData();
-        f.append('file_0_', fs.createReadStream(filePath), filePath.split('/').pop());
-        f.append('submitr', '[ رفع الملفات ]');
-
-        const html = await axios.post(
-            'https://top4top.io/index.php',
-            f,
-            {
-                headers: {
-                    ...f.getHeaders(),
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
-                    'Accept': 'text/html'
-                }
-            }
-        ).then(res => res.data).catch(() => null);
-
-        if (!html) return { status: false };
-
-        const get = (re) => {
-            const m = html.match(re);
-            return m ? m[1] : null;
-        };
-
-        const result =
-            get(/value="(https:\/\/[a-z]\.top4top\.io\/m_[^"]+)"/) ||
-            get(/https:\/\/[a-z]\.top4top\.io\/m_[^"]+/) ||
-            get(/value="(https:\/\/[a-z]\.top4top\.io\/p_[^"]+)"/) ||
-            get(/https:\/\/[a-z]\.top4top\.io\/p_[^"]+/);
-
-        const del =
-            get(/value="(https:\/\/top4top\.io\/del[^"]+)"/) ||
-            get(/https:\/\/top4top\.io\/del[^"]+/);
-
-        return {
-            status: true,
-            result,
-            delete: del
-        };
-    } catch (error) {
-        console.error("Top4Top error:", error);
-        return { status: false, error: error.message };
-    }
 }
 
 // ===============================
@@ -1041,6 +994,57 @@ async function ytplaymp4(query, quality = 360) {
 }
 
 // ===============================
+// TOP4TOP UPLOADER (BUFFER BASED - VERCEL SAFE)
+// ===============================
+async function top4topfunc(buffer, filename) {
+    try {
+        const form = new FormData()
+        form.append('file_0_', buffer, filename)
+        form.append('submitr', '[ رفع الملفات ]')
+
+        const html = await axios.post(
+            'https://top4top.io/index.php',
+            form,
+            {
+                headers: {
+                    ...form.getHeaders(),
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
+                    'Accept': 'text/html'
+                },
+                timeout: 30000
+            }
+        ).then(res => res.data)
+
+        const get = (re) => html.match(re)?.[1] || null
+
+        const result =
+            get(/value="(https:\/\/[a-z]\.top4top\.io\/m_[^"]+)"/) ||
+            get(/https:\/\/[a-z]\.top4top\.io\/m_[^\s"]+/) ||
+            get(/value="(https:\/\/[a-z]\.top4top\.io\/p_[^"]+)"/) ||
+            get(/https:\/\/[a-z]\.top4top\.io\/p_[^\s"]+/)
+
+        const del =
+            get(/value="(https:\/\/top4top\.io\/del[^"]+)"/) ||
+            get(/https:\/\/top4top\.io\/del[^\s"]+/)
+
+        if (!result) {
+            return { success: false, message: 'Upload failed or link not found' }
+        }
+
+        return {
+            success: true,
+            result,
+            delete: del
+        }
+    } catch (err) {
+        return {
+            success: false,
+            message: err.message
+        }
+    }
+}
+
+// ===============================
 // API ROUTES
 // ===============================
 
@@ -1093,51 +1097,6 @@ app.get('/api/v1/status', (req, res) => {
         version: '3.4.0'
     };
     formatJsonResponse(res, data);
-});
-
-// ===============================
-// TOP4TOP ENDPOINT
-// ===============================
-
-app.post('/api/v1/tools/top4top', upload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return errorResponse(res, 400, 'File tidak ditemukan', {
-                example: 'Gunakan form-data dengan key "file"'
-            });
-        }
-
-        const data = await top4top(req.file.path);
-
-        // Hapus file setelah upload
-        try {
-            fs.unlinkSync(req.file.path);
-        } catch (cleanupError) {
-            console.error('Cleanup error:', cleanupError);
-        }
-
-        if (!data.status) {
-            return formatJsonResponse(res, {
-                success: false,
-                creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-                message: 'Upload gagal ke Top4Top',
-                error: data.error || 'Unknown error',
-                timestamp: new Date().toISOString()
-            }, 500);
-        }
-
-        formatJsonResponse(res, {
-            success: true,
-            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-            message: 'File berhasil diupload ke Top4Top',
-            result: data.result,
-            delete: data.delete,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('Top4Top endpoint error:', error);
-        errorResponse(res, 500, 'Internal server error', { error: error.message });
-    }
 });
 
 // ===============================
@@ -1397,6 +1356,43 @@ app.get('/api/v1/search/channel', async (req, res) => {
     }
 });
 
+// ===============================
+// TOOLS - TOP4TOP
+// ===============================
+app.post('/api/v1/tools/top4top', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return errorResponse(res, 400, 'File tidak ditemukan', {
+                example: 'POST form-data: file=@example.mp3'
+            })
+        }
+
+        const result = await top4topfunc(
+            req.file.buffer,
+            req.file.originalname
+        )
+
+        if (!result.success) {
+            return errorResponse(res, 500, 'Upload ke Top4Top gagal', result)
+        }
+
+        formatJsonResponse(res, {
+            success: true,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            file: {
+                name: req.file.originalname,
+                size: req.file.size,
+                mimetype: req.file.mimetype
+            },
+            result: result.result,
+            delete: result.delete,
+            timestamp: new Date().toISOString()
+        })
+    } catch (error) {
+        console.error('Top4Top endpoint error:', error)
+        errorResponse(res, 500, 'Internal server error', error.message)
+    }
+})
 // ===============================
 // UTILITY ENDPOINTS
 // ===============================
