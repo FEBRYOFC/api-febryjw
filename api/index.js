@@ -1008,12 +1008,23 @@ async function top4topfunc(buffer, filename) {
             {
                 headers: {
                     ...form.getHeaders(),
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
-                    'Accept': 'text/html'
+                    'User-Agent':
+                        'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                    'Accept':
+                        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://top4top.io/',
+                    'Origin': 'https://top4top.io'
                 },
-                timeout: 30000
+                maxBodyLength: Infinity,
+                maxContentLength: Infinity,
+                timeout: 60000
             }
         ).then(res => res.data)
+
+        if (typeof html !== 'string') {
+            return { success: false, message: 'Invalid response from Top4Top' }
+        }
 
         const get = (re) => html.match(re)?.[1] || null
 
