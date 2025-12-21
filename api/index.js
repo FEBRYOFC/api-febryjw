@@ -139,7 +139,7 @@ async function savetube(link, quality, value) {
 }
 
 // ===============================
-// TIKTOK FUNCTIONS - SESUAI REQUEST
+// TIKTOK FUNCTIONS
 // ===============================
 
 async function tiktokDl(url) {
@@ -250,7 +250,6 @@ async function tiktokMp3(url) {
     try {
         const result = await tiktokDl(url);
         
-        // Format response agar sesuai dengan struktur API kita
         return {
             success: result.status,
             creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
@@ -309,7 +308,6 @@ async function tiktokMp4(url) {
     try {
         const result = await tiktokDl(url);
         
-        // Format response agar sesuai dengan struktur API kita
         const downloadUrl = result.data[0]?.url || result.data[1]?.url;
         
         return {
@@ -456,6 +454,96 @@ async function tiktokSearchVideo(query) {
 }
 
 // ===============================
+// TOP4TOP FUNCTIONS
+// ===============================
+
+async function top4top(fileBuffer, fileName) {
+    try {
+        const f = new FormData();
+        
+        // Menggunakan buffer file
+        f.append('file_0_', Buffer.from(fileBuffer), {
+            filename: fileName,
+            contentType: 'application/octet-stream'
+        });
+        f.append('submitr', '[ رفع الملفات ]');
+
+        const response = await axios.post(
+            'https://top4top.io/index.php',
+            f,
+            {
+                headers: {
+                    ...f.getHeaders(),
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Origin': 'https://top4top.io',
+                    'Referer': 'https://top4top.io/',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'Sec-Fetch-User': '?1',
+                    'Cache-Control': 'max-age=0'
+                },
+                timeout: 30000,
+                maxBodyLength: Infinity,
+                maxContentLength: Infinity
+            }
+        ).then(x => x.data).catch(error => {
+            console.error("Top4Top API error:", error.message);
+            return null;
+        });
+
+        if (!response) {
+            return null;
+        }
+
+        // Fungsi untuk mencari pola regex
+        const get = regex => {
+            const match = response.match(regex);
+            return match ? match[1] : null;
+        };
+
+        // Mencari URL hasil upload
+        const result =
+            get(/value="(https:\/\/[a-z]\.top4top\.io\/m_[^"]+)"/) ||
+            get(/https:\/\/[a-z]\.top4top\.io\/m_[^"]+/) ||
+            get(/value="(https:\/\/[a-z]\.top4top\.io\/p_[^"]+)"/) ||
+            get(/https:\/\/[a-z]\.top4top\.io\/p_[^"]+/);
+
+        // Mencari URL delete
+        const deleteUrl =
+            get(/value="(https:\/\/top4top\.io\/del[^"]+)"/) ||
+            get(/https:\/\/top4top\.io\/del[^"]+/);
+
+        return result ? { 
+            success: true,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            timestamp: new Date().toISOString(),
+            result: result, 
+            delete: deleteUrl,
+            filename: fileName
+        } : {
+            success: false,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            timestamp: new Date().toISOString(),
+            message: "Failed to extract upload URL from response"
+        };
+    } catch (error) {
+        console.error("Top4Top error:", error);
+        return {
+            success: false,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            timestamp: new Date().toISOString(),
+            error: error.message
+        };
+    }
+}
+
+// ===============================
 // CORE FUNCTIONS
 // ===============================
 
@@ -486,7 +574,6 @@ async function ytmp3(link, quality = 128) {
             };
         }
 
-        // Get detailed metadata
         const metadataResult = await ytMetadata(url);
         
         const metadata = metadataResult.success ? {
@@ -577,7 +664,6 @@ async function ytmp4(link, quality = 360) {
             };
         }
 
-        // Get detailed metadata
         const metadataResult = await ytMetadata(url);
         
         const metadata = metadataResult.success ? {
@@ -641,7 +727,6 @@ async function ytmp4(link, quality = 360) {
     }
 }
 
-// YouTube Search - Return all results
 async function youtubeSearch(query) {
     try {
         const searchResults = await yts(query);
@@ -813,13 +898,8 @@ async function ytChannel(input) {
     }
 }
 
-// ===============================
-// COMBO FUNCTIONS (Search + Download) - REVISED STRUCTURE - DIPERBAIKI
-// ===============================
-
 async function ytplaymp3(query, quality = 128) {
     try {
-        // Step 1: Search for videos
         const searchResult = await youtubeSearch(query);
 
         if (!searchResult.success || searchResult.results.videos.length === 0) {
@@ -831,13 +911,10 @@ async function ytplaymp3(query, quality = 128) {
             };
         }
 
-        // Step 2: Get first video
         const firstVideo = searchResult.results.videos[0];
         
-        // Step 3: Get detailed metadata (DENGAN FIELD YANG DIMINTA)
         const metadataResult = await ytMetadata(firstVideo.url);
         
-        // Step 4: Download as MP3
         const downloadResult = await ytmp3(firstVideo.url, quality);
 
         if (!downloadResult.success) {
@@ -849,36 +926,35 @@ async function ytplaymp3(query, quality = 128) {
             };
         }
 
-        // Metadata dengan field yang diminta
         const simplifiedMetadata = metadataResult.success ? {
-            videoId: metadataResult.videoId,               // ✅
-            title: metadataResult.title,                   // ✅
-            description: metadataResult.description,       // ✅ DITAMBAHKAN
-            channelTitle: metadataResult.channelTitle,     // ✅
+            videoId: metadataResult.videoId,
+            title: metadataResult.title,
+            description: metadataResult.description,
+            channelTitle: metadataResult.channelTitle,
             thumbnail: metadataResult.thumbnails?.find(t => t.quality === "high")?.url || 
-                      metadataResult.thumbnails?.[0]?.url, // ✅ DITAMBAHKAN
-            url: firstVideo.url,                           // ✅ DITAMBAHKAN
-            publishedAt: metadataResult.publishedAt,       // ✅ DITAMBAHKAN
-            publishedFormat: metadataResult.publishedFormat, // ✅
-            duration: firstVideo.duration,                 // ✅
+                      metadataResult.thumbnails?.[0]?.url,
+            url: firstVideo.url,
+            publishedAt: metadataResult.publishedAt,
+            publishedFormat: metadataResult.publishedFormat,
+            duration: firstVideo.duration,
             statistics: {
-                viewCount: metadataResult.statistics.viewCount, // ✅
-                likeCount: metadataResult.statistics.likeCount,  // ✅
-                commentCount: metadataResult.statistics.commentCount // ✅ DITAMBAHKAN
+                viewCount: metadataResult.statistics.viewCount,
+                likeCount: metadataResult.statistics.likeCount,
+                commentCount: metadataResult.statistics.commentCount
             }
         } : {
-            videoId: firstVideo.videoId,                   // ✅
-            title: firstVideo.title,                       // ✅
-            description: firstVideo.description || '',     // ✅ DITAMBAHKAN
-            channelTitle: firstVideo.author,               // ✅
-            thumbnail: firstVideo.thumbnail,               // ✅ DITAMBAHKAN
-            url: firstVideo.url,                           // ✅ DITAMBAHKAN
-            publishedAt: firstVideo.uploaded,              // ✅ DITAMBAHKAN
-            duration: firstVideo.duration,                 // ✅
+            videoId: firstVideo.videoId,
+            title: firstVideo.title,
+            description: firstVideo.description || '',
+            channelTitle: firstVideo.author,
+            thumbnail: firstVideo.thumbnail,
+            url: firstVideo.url,
+            publishedAt: firstVideo.uploaded,
+            duration: firstVideo.duration,
             statistics: {
-                viewCount: firstVideo.views,               // ✅
-                likeCount: 0,                              // ✅
-                commentCount: 0                            // ✅ DITAMBAHKAN
+                viewCount: firstVideo.views,
+                likeCount: 0,
+                commentCount: 0
             }
         };
 
@@ -907,7 +983,6 @@ async function ytplaymp3(query, quality = 128) {
 
 async function ytplaymp4(query, quality = 360) {
     try {
-        // Step 1: Search for videos
         const searchResult = await youtubeSearch(query);
 
         if (!searchResult.success || searchResult.results.videos.length === 0) {
@@ -919,13 +994,10 @@ async function ytplaymp4(query, quality = 360) {
             };
         }
 
-        // Step 2: Get first video
         const firstVideo = searchResult.results.videos[0];
         
-        // Step 3: Get detailed metadata (DENGAN FIELD YANG DIMINTA)
         const metadataResult = await ytMetadata(firstVideo.url);
         
-        // Step 4: Download as MP4
         const downloadResult = await ytmp4(firstVideo.url, quality);
 
         if (!downloadResult.success) {
@@ -937,36 +1009,35 @@ async function ytplaymp4(query, quality = 360) {
             };
         }
 
-        // Metadata dengan field yang diminta
         const simplifiedMetadata = metadataResult.success ? {
-            videoId: metadataResult.videoId,               // ✅
-            title: metadataResult.title,                   // ✅
-            description: metadataResult.description,       // ✅ DITAMBAHKAN
-            channelTitle: metadataResult.channelTitle,     // ✅
+            videoId: metadataResult.videoId,
+            title: metadataResult.title,
+            description: metadataResult.description,
+            channelTitle: metadataResult.channelTitle,
             thumbnail: metadataResult.thumbnails?.find(t => t.quality === "high")?.url || 
-                      metadataResult.thumbnails?.[0]?.url, // ✅ DITAMBAHKAN
-            url: firstVideo.url,                           // ✅ DITAMBAHKAN
-            publishedAt: metadataResult.publishedAt,       // ✅ DITAMBAHKAN
-            publishedFormat: metadataResult.publishedFormat, // ✅
-            duration: firstVideo.duration,                 // ✅
+                      metadataResult.thumbnails?.[0]?.url,
+            url: firstVideo.url,
+            publishedAt: metadataResult.publishedAt,
+            publishedFormat: metadataResult.publishedFormat,
+            duration: firstVideo.duration,
             statistics: {
-                viewCount: metadataResult.statistics.viewCount, // ✅
-                likeCount: metadataResult.statistics.likeCount,  // ✅
-                commentCount: metadataResult.statistics.commentCount // ✅ DITAMBAHKAN
+                viewCount: metadataResult.statistics.viewCount,
+                likeCount: metadataResult.statistics.likeCount,
+                commentCount: metadataResult.statistics.commentCount
             }
         } : {
-            videoId: firstVideo.videoId,                   // ✅
-            title: firstVideo.title,                       // ✅
-            description: firstVideo.description || '',     // ✅ DITAMBAHKAN
-            channelTitle: firstVideo.author,               // ✅
-            thumbnail: firstVideo.thumbnail,               // ✅ DITAMBAHKAN
-            url: firstVideo.url,                           // ✅ DITAMBAHKAN
-            publishedAt: firstVideo.uploaded,              // ✅ DITAMBAHKAN
-            duration: firstVideo.duration,                 // ✅
+            videoId: firstVideo.videoId,
+            title: firstVideo.title,
+            description: firstVideo.description || '',
+            channelTitle: firstVideo.author,
+            thumbnail: firstVideo.thumbnail,
+            url: firstVideo.url,
+            publishedAt: firstVideo.uploaded,
+            duration: firstVideo.duration,
             statistics: {
-                viewCount: firstVideo.views,               // ✅
-                likeCount: 0,                              // ✅
-                commentCount: 0                            // ✅ DITAMBAHKAN
+                viewCount: firstVideo.views,
+                likeCount: 0,
+                commentCount: 0
             }
         };
 
@@ -994,58 +1065,6 @@ async function ytplaymp4(query, quality = 360) {
 }
 
 // ===============================
-// TOP4TOP UPLOADER (BUFFER BASED - VERCEL SAFE)
-// ===============================
-async function top4topfunc(buffer, filename) {
-    try {
-        // STEP 1: Ambil session dulu
-        const session = await axios.get('https://top4top.io/', {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 10)'
-            }
-        })
-
-        const cookie = session.headers['set-cookie']?.join('; ') || ''
-
-        const form = new FormData()
-        form.append('file_0_', buffer, filename)
-        form.append('submitr', '[ رفع الملفات ]')
-
-        const html = await axios.post(
-            'https://top4top.io/index.php',
-            form,
-            {
-                headers: {
-                    ...form.getHeaders(),
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
-                    'Accept': 'text/html',
-                    'Cookie': cookie, // 🔥 INI PENTING
-                    'Origin': 'https://top4top.io',
-                    'Referer': 'https://top4top.io/'
-                },
-                timeout: 60000
-            }
-        ).then(res => res.data)
-
-        const get = r => html.match(r)?.[1]
-
-        const result =
-            get(/value="(https:\/\/[a-z]\.top4top\.io\/m_[^"]+)"/) ||
-            get(/https:\/\/[a-z]\.top4top\.io\/m_[^\s"]+/) ||
-            get(/value="(https:\/\/[a-z]\.top4top\.io\/p_[^"]+)"/)
-
-        const del =
-            get(/value="(https:\/\/top4top\.io\/del[^"]+)"/)
-
-        if (!result) return { success: false, message: 'Upload blocked' }
-
-        return { success: true, result, delete: del }
-    } catch (e) {
-        return { success: false, message: e.message }
-    }
-}
-
-// ===============================
 // API ROUTES
 // ===============================
 
@@ -1055,7 +1074,7 @@ app.get('/', (req, res) => {
         status: true,
         message: 'YouTube & TikTok Downloader & Search API',
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-        version: '3.4.0',
+        version: '3.5.0',
         timestamp: new Date().toISOString(),
         endpoints: {
             download: {
@@ -1095,9 +1114,51 @@ app.get('/api/v1/status', (req, res) => {
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
         timestamp: new Date().toISOString(),
         serverTime: format_date(new Date()),
-        version: '3.4.0'
+        version: '3.5.0'
     };
     formatJsonResponse(res, data);
+});
+
+// ===============================
+// TOOLS ENDPOINTS - TOP4TOP
+// ===============================
+
+// Top4Top File Upload
+app.post('/api/v1/tools/top4top', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return errorResponse(res, 400, 'File is required', {
+                example: 'Send POST request with form-data containing file'
+            });
+        }
+
+        const fileBuffer = req.file.buffer;
+        const fileName = req.file.originalname || `file_${Date.now()}`;
+        const fileSize = req.file.size;
+
+        // Validasi ukuran file (maks 50MB)
+        if (fileSize > 50 * 1024 * 1024) {
+            return errorResponse(res, 400, 'File size too large. Maximum 50MB allowed');
+        }
+
+        // Log untuk debugging
+        console.log(`Processing file: ${fileName} (${fileSize} bytes)`);
+
+        const result = await top4top(fileBuffer, fileName);
+
+        if (!result || !result.success) {
+            return errorResponse(res, 500, 'Failed to upload file to Top4Top', {
+                error: result?.error || 'Unknown error'
+            });
+        }
+
+        formatJsonResponse(res, result);
+    } catch (error) {
+        console.error('Top4Top endpoint error:', error);
+        errorResponse(res, 500, 'Internal server error', {
+            error: error.message
+        });
+    }
 });
 
 // ===============================
@@ -1358,43 +1419,6 @@ app.get('/api/v1/search/channel', async (req, res) => {
 });
 
 // ===============================
-// TOOLS - TOP4TOP
-// ===============================
-app.post('/api/v1/tools/top4top', upload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return errorResponse(res, 400, 'File tidak ditemukan', {
-                example: 'POST form-data: file=@example.mp3'
-            })
-        }
-
-        const result = await top4topfunc(
-            req.file.buffer,
-            req.file.originalname
-        )
-
-        if (!result.success) {
-            return errorResponse(res, 500, 'Upload ke Top4Top gagal', result)
-        }
-
-        formatJsonResponse(res, {
-            success: true,
-            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-            file: {
-                name: req.file.originalname,
-                size: req.file.size,
-                mimetype: req.file.mimetype
-            },
-            result: result.result,
-            delete: result.delete,
-            timestamp: new Date().toISOString()
-        })
-    } catch (error) {
-        console.error('Top4Top endpoint error:', error)
-        errorResponse(res, 500, 'Internal server error', error.message)
-    }
-})
-// ===============================
 // UTILITY ENDPOINTS
 // ===============================
 
@@ -1405,7 +1429,7 @@ app.get('/api/health', (req, res) => {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-        version: '3.4.0'
+        version: '3.5.0'
     };
     formatJsonResponse(res, data);
 });
@@ -1417,7 +1441,7 @@ app.get('/api/test', (req, res) => {
         message: 'API is working!',
         timestamp: new Date().toISOString(),
         creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-        version: '3.4.0'
+        version: '3.5.0'
     };
     formatJsonResponse(res, data);
 });
