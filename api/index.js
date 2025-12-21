@@ -998,6 +998,15 @@ async function ytplaymp4(query, quality = 360) {
 // ===============================
 async function top4topfunc(buffer, filename) {
     try {
+        // STEP 1: Ambil session dulu
+        const session = await axios.get('https://top4top.io/', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10)'
+            }
+        })
+
+        const cookie = session.headers['set-cookie']?.join('; ') || ''
+
         const form = new FormData()
         form.append('file_0_', buffer, filename)
         form.append('submitr', '[ رفع الملفات ]')
@@ -1008,50 +1017,31 @@ async function top4topfunc(buffer, filename) {
             {
                 headers: {
                     ...form.getHeaders(),
-                    'User-Agent':
-                        'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-                    'Accept':
-                        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': 'https://top4top.io/',
-                    'Origin': 'https://top4top.io'
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
+                    'Accept': 'text/html',
+                    'Cookie': cookie, // 🔥 INI PENTING
+                    'Origin': 'https://top4top.io',
+                    'Referer': 'https://top4top.io/'
                 },
-                maxBodyLength: Infinity,
-                maxContentLength: Infinity,
                 timeout: 60000
             }
         ).then(res => res.data)
 
-        if (typeof html !== 'string') {
-            return { success: false, message: 'Invalid response from Top4Top' }
-        }
-
-        const get = (re) => html.match(re)?.[1] || null
+        const get = r => html.match(r)?.[1]
 
         const result =
             get(/value="(https:\/\/[a-z]\.top4top\.io\/m_[^"]+)"/) ||
             get(/https:\/\/[a-z]\.top4top\.io\/m_[^\s"]+/) ||
-            get(/value="(https:\/\/[a-z]\.top4top\.io\/p_[^"]+)"/) ||
-            get(/https:\/\/[a-z]\.top4top\.io\/p_[^\s"]+/)
+            get(/value="(https:\/\/[a-z]\.top4top\.io\/p_[^"]+)"/)
 
         const del =
-            get(/value="(https:\/\/top4top\.io\/del[^"]+)"/) ||
-            get(/https:\/\/top4top\.io\/del[^\s"]+/)
+            get(/value="(https:\/\/top4top\.io\/del[^"]+)"/)
 
-        if (!result) {
-            return { success: false, message: 'Upload failed or link not found' }
-        }
+        if (!result) return { success: false, message: 'Upload blocked' }
 
-        return {
-            success: true,
-            result,
-            delete: del
-        }
-    } catch (err) {
-        return {
-            success: false,
-            message: err.message
-        }
+        return { success: true, result, delete: del }
+    } catch (e) {
+        return { success: false, message: e.message }
     }
 }
 
