@@ -1128,7 +1128,7 @@ app.get('/', (req, res) => {
         timestamp: new Date().toISOString(),
         endpoints: {
             download: {
-                youtube_audio_v2: '/api/v1/download/youtube/youtube-audiov2?url=URL'
+                youtube_audio_v2: '/api/v1/download/youtube/youtube-audiov2?url=URL',
                 youtube_audio: '/api/v1/download/youtube/audio?url=URL&quality=128',
                 youtube_video: '/api/v1/download/youtube/video?url=URL&quality=360',
                 tiktok: '/api/v1/download/tiktok-download?url=TIKTOK_URL',
