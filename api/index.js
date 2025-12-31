@@ -95,6 +95,56 @@ const decode = (enc) => {
     }
 };
 
+async function youtubeAudioV2(url) {
+    try {
+        // Step 1: Ambil info video
+        const infoResponse = await axios.post(
+            'https://downr.org/.netlify/functions/video-info',
+            { url },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://downr.org',
+                    'Referer': 'https://downr.org/'
+                }
+            }
+        );
+
+        // Step 2: Request audio download
+        const downloadResponse = await axios.post(
+            'https://downr.org/.netlify/functions/youtube-download',
+            {
+                url,
+                downloadMode: "audio",
+                audioFormat: "mp3",
+                audioQuality: "128"
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://downr.org',
+                    'Referer': 'https://downr.org/'
+                }
+            }
+        );
+
+        return {
+            success: true,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            timestamp: new Date().toISOString(),
+            metadata: infoResponse.data,
+            download: downloadResponse.data
+        };
+    } catch (error) {
+        return {
+            success: false,
+            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+            error: error.response?.data || error.message,
+            timestamp: new Date().toISOString()
+        };
+    }
+}
+
 async function savetube(link, quality, value) {
     try {
         const cdnResponse = await axios.get("https://media.savetube.me/api/random-cdn");
@@ -1078,6 +1128,7 @@ app.get('/', (req, res) => {
         timestamp: new Date().toISOString(),
         endpoints: {
             download: {
+                youtube_audio_v2: '/api/v1/download/youtube/youtube-audiov2?url=URL'
                 youtube_audio: '/api/v1/download/youtube/audio?url=URL&quality=128',
                 youtube_video: '/api/v1/download/youtube/video?url=URL&quality=360',
                 tiktok: '/api/v1/download/tiktok-download?url=TIKTOK_URL',
@@ -1122,6 +1173,33 @@ app.get('/api/v1/status', (req, res) => {
 // ===============================
 // TOOLS ENDPOINTS - TOP4TOP
 // ===============================
+
+
+// ===============================
+// YouTube Audio V2 (DOWNR SCRAPER)
+// ===============================
+app.get('/api/v1/download/youtube/youtube-audiov2', async (req, res) => {
+    try {
+        const { url } = req.query;
+
+        if (!url) {
+            return errorResponse(res, 400, 'Parameter url is required', {
+                example: '/api/v1/download/youtube/youtube-audiov2?url=https://youtu.be/xxxxx'
+            });
+        }
+
+        const result = await youtubeAudioV2(url);
+
+        if (!result.success) {
+            return formatJsonResponse(res, result, 400);
+        }
+
+        formatJsonResponse(res, result);
+    } catch (err) {
+        console.error('YouTube Audio V2 error:', err);
+        errorResponse(res, 500, 'Internal server error');
+    }
+});
 
 // Top4Top File Upload
 app.post('/api/v1/tools/top4top', upload.single('file'), async (req, res) => {
