@@ -10,7 +10,9 @@ const fs = require("fs");
 const FormData = require("form-data");
 const multer = require("multer");
 const app = express();
+const chromium = require('@sparticuz/chromium');
 
+const puppeteer = require('puppeteer-core');
 // Multer setup
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -95,53 +97,93 @@ const decode = (enc) => {
     }
 };
 
-async function youtubeAudioV2(url) {
+// ===============================
+// SHORTLINK BYPASS (VERCEL OPTIMIZED)
+// ===============================
+
+async function bypassShortlink(targetUrl) {
+    
+    let browser = null;
     try {
-        // Step 1: Ambil info video
-        const infoResponse = await axios.post(
-            'https://downr.org/.netlify/functions/video-info',
-            { url },
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Origin': 'https://downr.org',
-                    'Referer': 'https://downr.org/'
-                }
-            }
-        );
+        // Konfigurasi khusus untuk lingkungan Serverless/Vercel
+        browser = await puppeteer.launch({
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
+            ignoreHTTPSErrors: true,
+        });
 
-        // Step 2: Request audio download
-        const downloadResponse = await axios.post(
-            'https://downr.org/.netlify/functions/youtube-download',
-            {
-                url,
-                downloadMode: "audio",
-                audioFormat: "mp3",
-                audioQuality: "128"
-            },
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Origin': 'https://downr.org',
-                    'Referer': 'https://downr.org/'
-                }
-            }
-        );
+        const page = await browser.newPage();
+        
+        // Mencegah popup iklan
+        await page.evaluateOnNewDocument(() => {
+            window.open = () => {};
+            const NativeTo = window.setTimeout;
+            const NativeIv = window.setInterval;
+            window.setTimeout = (fn, ms) => NativeTo(fn, ms / 1e7);
+            window.setInterval = (fn, ms) => NativeIv(fn, ms / 1e7);
+        });
 
-        return {
-            success: true,
-            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-            timestamp: new Date().toISOString(),
-            metadata: infoResponse.data,
-            download: downloadResponse.data
-        };
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+        // Script bypass otomatis (Sesuai kode yang Anda berikan)
+        await page.evaluate(() => {
+            const Click = (sel) => {
+                const Iv = setInterval(() => {
+                    const El = document.querySelector(sel);
+                    if (El && El.offsetParent !== null) {
+                        clearInterval(Iv);
+                        setTimeout(() => El.click(), 0);
+                    }
+                }, 100);
+            };
+
+            const Verify = () => {
+                const Iv = setInterval(() => {
+                    const El = document.querySelector('#verify > a');
+                    if (El && El.offsetParent !== null && El.textContent.trim() !== 'Scroll Down') {
+                        El.click();
+                    }
+                }, 500);
+            };
+
+            setInterval(() => {
+                const El = document.querySelector('#btn-3');
+                if (El && El.offsetParent !== null) El.click();
+            }, 500);
+
+            Click('#submit-button');
+            Click('#btn-2');
+            Click('#verify > a');
+            Click('#verify > button');
+            Click('#first_open_button_page_1');
+            Verify();
+
+            if (location.href.includes('sfl.gl/ready/go')) {
+                const Iv = setInterval(() => {
+                    const El = [...document.querySelectorAll('span.font-medium.text-base')]
+                        .find(N => N.textContent.trim() === 'OPEN LINK');
+                    if (El) {
+                        clearInterval(Iv);
+                        El.click();
+                    }
+                }, 500);
+            }
+        });
+
+        // Menunggu redirect hingga URL berubah atau timeout
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 });
+        const finalUrl = page.url();
+
+        return { success: true, resultUrl: finalUrl };
+
     } catch (error) {
-        return {
-            success: false,
-            creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
-            error: error.response?.data || error.message,
-            timestamp: new Date().toISOString()
-        };
+        return { success: false, message: error.message };
+    } finally {
+        if (browser !== null) {
+            await browser.close();
+        }
     }
 }
 
@@ -1174,31 +1216,18 @@ app.get('/api/v1/status', (req, res) => {
 // TOOLS ENDPOINTS - TOP4TOP
 // ===============================
 
+app.get('/api/v1/tools/bypass', async (req, res) => {
+    const { url } = req.query;
+    if (!url) return errorResponse(res, 400, 'URL parameter is required');
 
-// ===============================
-// YouTube Audio V2 (DOWNR SCRAPER)
-// ===============================
-app.get('/api/v1/download/youtube/youtube-audiov2', async (req, res) => {
-    try {
-        const { url } = req.query;
+    const result = await bypassShortlink(url);
+    if (!result.success) return errorResponse(res, 500, result.message);
 
-        if (!url) {
-            return errorResponse(res, 400, 'Parameter url is required', {
-                example: '/api/v1/download/youtube/youtube-audiov2?url=https://youtu.be/xxxxx'
-            });
-        }
-
-        const result = await youtubeAudioV2(url);
-
-        if (!result.success) {
-            return formatJsonResponse(res, result, 400);
-        }
-
-        formatJsonResponse(res, result);
-    } catch (err) {
-        console.error('YouTube Audio V2 error:', err);
-        errorResponse(res, 500, 'Internal server error');
-    }
+    formatJsonResponse(res, {
+        success: true,
+        creator: '𝐅𝐞𝐛𝐫𝐲-𝐉𝐖⚡',
+        data: result
+    });
 });
 
 // Top4Top File Upload
