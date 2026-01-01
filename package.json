@@ -15,8 +15,8 @@
     "yt-search": "^2.10.4",
     "multer": "^1.4.5-lts.1",
     "form-data": "^4.0.0",
-    "puppeteer-core": "^22.6.0",
-    "@sparticuz/chromium": "^123.0.1"
+    "puppeteer-core": "22.6.0",
+    "@sparticuz/chromium": "123.0.1"
   },
   "engines": {
     "node": "20.x"
