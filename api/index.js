@@ -103,83 +103,84 @@ const decode = (enc) => {
 
 async function bypassShortlink(targetUrl) {
     let browser = null;
-
     try {
+        const executablePath = await chromium.executablePath();
+        
         browser = await puppeteer.launch({
             args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
             defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
+            executablePath: executablePath,
             headless: chromium.headless,
             ignoreHTTPSErrors: true,
         });
 
         const page = await browser.newPage();
-        // Set User Agent agar tidak terlalu terlihat seperti bot
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
+        // Block iklan agar tidak berat
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const resourceType = req.resourceType();
+            if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
 
         await page.evaluateOnNewDocument(() => {
             window.open = () => {};
             const NativeTo = window.setTimeout;
+            const NativeIv = window.setInterval;
             window.setTimeout = (fn, ms) => NativeTo(fn, ms / 1e7);
+            window.setInterval = (fn, ms) => NativeIv(fn, ms / 1e7);
         });
 
-        console.log("Navigasi ke:", targetUrl);
-        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-        // Injeksi script untuk klik otomatis terus menerus
+        // Injeksi script klik otomatis
         await page.evaluate(() => {
-            setInterval(() => {
-                const selectors = [
-                    '#submit-button', '#btn-2', '#btn-3', 
-                    '#verify > a', '#verify > button', 
-                    '#first_open_button_page_1',
-                    '#second_open_placeholder a'
-                ];
-                selectors.forEach(s => {
-                    const el = document.querySelector(s);
-                    if (el && el.offsetParent !== null && el.textContent.trim() !== 'Scroll Down') {
-                        el.click();
+            const Click = (sel) => {
+                const Iv = setInterval(() => {
+                    const El = document.querySelector(sel);
+                    if (El && El.offsetParent !== null) {
+                        clearInterval(Iv);
+                        El.click();
                     }
-                });
+                }, 500);
+            };
 
-                // Khusus untuk tombol "OPEN LINK" di sfl.gl
-                if (location.href.includes('sfl.gl/ready/go')) {
-                    const openLink = [...document.querySelectorAll('span, a')]
-                        .find(n => n.textContent.trim() === 'OPEN LINK');
-                    if (openLink) openLink.click();
-                }
+            Click('#submit-button');
+            Click('#btn-2');
+            Click('#btn-3');
+            Click('#verify > a');
+            Click('#first_open_button_page_1');
+
+            // Khusus halaman terakhir sfl.gl
+            setInterval(() => {
+                const openLinkBtn = [...document.querySelectorAll('span, a, button')]
+                    .find(el => el.textContent.trim() === 'OPEN LINK');
+                if (openLinkBtn) openLinkBtn.click();
             }, 1000);
         });
 
-        // LOGIKA KRUSIAL: Tunggu sampai URL bukan lagi sfl.gl atau link perantara
-        let currentUrl = page.url();
-        let timeoutReached = false;
-        const startTime = Date.now();
+        // TUNGGU SAMPAI REDIRECT KELUAR DARI SFL.GL
+        // Kita menunggu maksimal 45 detik sampai URL berubah
+        await page.waitForFunction(
+            () => !window.location.href.includes('sfl.gl') && !window.location.href.includes('about:blank'),
+            { timeout: 45000, polling: 1000 }
+        );
 
-        // Loop selama 45 detik atau sampai URL berubah dari domain sfl.gl
-        while (currentUrl.includes('sfl.gl') || currentUrl.includes('__cf_chl')) {
-            if (Date.now() - startTime > 45000) {
-                timeoutReached = true;
-                break;
-            }
-            // Tunggu sebentar dan cek URL lagi
-            await new Promise(r => setTimeout(r, 2000));
-            currentUrl = page.url();
-        }
-
-        if (timeoutReached) {
-            throw new Error("Timeout: Gagal melewati Cloudflare atau halaman perantara sfl.gl");
-        }
+        const finalUrl = page.url();
 
         return { 
             success: true, 
-            resultUrl: currentUrl 
+            resultUrl: finalUrl 
         };
 
     } catch (error) {
         return { success: false, message: error.message };
     } finally {
-        if (browser) await browser.close();
+        if (browser !== null) await browser.close();
     }
 }
 
