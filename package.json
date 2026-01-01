@@ -17,8 +17,7 @@
     "form-data": "^4.0.0",
     "puppeteer-core": "^22.6.0",
     "@sparticuz/chromium": "^123.0.1"
-  }
-},
+  },
   "engines": {
     "node": "20.x"
   }
