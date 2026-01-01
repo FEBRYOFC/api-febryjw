@@ -11,8 +11,8 @@ const FormData = require("form-data");
 const multer = require("multer");
 const app = express();
 const chromium = require('@sparticuz/chromium');
-
 const puppeteer = require('puppeteer-core');
+
 // Multer setup
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -102,14 +102,15 @@ const decode = (enc) => {
 // ===============================
 
 async function bypassShortlink(targetUrl) {
-    
     let browser = null;
     try {
-        // Konfigurasi khusus untuk lingkungan Serverless/Vercel
+        // Tambahkan pengecekan path
+        const executablePath = await chromium.executablePath();
+        
         browser = await puppeteer.launch({
-            args: chromium.args,
+            args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
             defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
+            executablePath: executablePath,
             headless: chromium.headless,
             ignoreHTTPSErrors: true,
         });
@@ -1593,6 +1594,5 @@ app.use((err, req, res, next) => {
     formatJsonResponse(res, data, 500);
 });
 
-module.exports = (req, res) => {
-    app(req, res);
-};
+// Pastikan tidak ada app.listen() di dalam file ini untuk Vercel
+module.exports = app;
