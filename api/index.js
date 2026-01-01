@@ -102,8 +102,6 @@ const decode = (enc) => {
 // ===============================
 
 async function bypassShortlink(targetUrl) {
-    const chromium = require('@sparticuz/chromium');
-    const puppeteer = require('puppeteer-core');
     let browser = null;
 
     try {
