@@ -102,89 +102,86 @@ const decode = (enc) => {
 // ===============================
 
 async function bypassShortlink(targetUrl) {
+    const chromium = require('@sparticuz/chromium');
+    const puppeteer = require('puppeteer-core');
     let browser = null;
+
     try {
-        // Tambahkan pengecekan path
-        const executablePath = await chromium.executablePath();
-        
         browser = await puppeteer.launch({
-            args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+            args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
             defaultViewport: chromium.defaultViewport,
-            executablePath: executablePath,
+            executablePath: await chromium.executablePath(),
             headless: chromium.headless,
             ignoreHTTPSErrors: true,
         });
 
         const page = await browser.newPage();
-        
-        // Mencegah popup iklan
+        // Set User Agent agar tidak terlalu terlihat seperti bot
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
         await page.evaluateOnNewDocument(() => {
             window.open = () => {};
             const NativeTo = window.setTimeout;
-            const NativeIv = window.setInterval;
             window.setTimeout = (fn, ms) => NativeTo(fn, ms / 1e7);
-            window.setInterval = (fn, ms) => NativeIv(fn, ms / 1e7);
         });
 
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        console.log("Navigasi ke:", targetUrl);
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-        // Script bypass otomatis (Sesuai kode yang Anda berikan)
+        // Injeksi script untuk klik otomatis terus menerus
         await page.evaluate(() => {
-            const Click = (sel) => {
-                const Iv = setInterval(() => {
-                    const El = document.querySelector(sel);
-                    if (El && El.offsetParent !== null) {
-                        clearInterval(Iv);
-                        setTimeout(() => El.click(), 0);
-                    }
-                }, 100);
-            };
-
-            const Verify = () => {
-                const Iv = setInterval(() => {
-                    const El = document.querySelector('#verify > a');
-                    if (El && El.offsetParent !== null && El.textContent.trim() !== 'Scroll Down') {
-                        El.click();
-                    }
-                }, 500);
-            };
-
             setInterval(() => {
-                const El = document.querySelector('#btn-3');
-                if (El && El.offsetParent !== null) El.click();
-            }, 500);
-
-            Click('#submit-button');
-            Click('#btn-2');
-            Click('#verify > a');
-            Click('#verify > button');
-            Click('#first_open_button_page_1');
-            Verify();
-
-            if (location.href.includes('sfl.gl/ready/go')) {
-                const Iv = setInterval(() => {
-                    const El = [...document.querySelectorAll('span.font-medium.text-base')]
-                        .find(N => N.textContent.trim() === 'OPEN LINK');
-                    if (El) {
-                        clearInterval(Iv);
-                        El.click();
+                const selectors = [
+                    '#submit-button', '#btn-2', '#btn-3', 
+                    '#verify > a', '#verify > button', 
+                    '#first_open_button_page_1',
+                    '#second_open_placeholder a'
+                ];
+                selectors.forEach(s => {
+                    const el = document.querySelector(s);
+                    if (el && el.offsetParent !== null && el.textContent.trim() !== 'Scroll Down') {
+                        el.click();
                     }
-                }, 500);
-            }
+                });
+
+                // Khusus untuk tombol "OPEN LINK" di sfl.gl
+                if (location.href.includes('sfl.gl/ready/go')) {
+                    const openLink = [...document.querySelectorAll('span, a')]
+                        .find(n => n.textContent.trim() === 'OPEN LINK');
+                    if (openLink) openLink.click();
+                }
+            }, 1000);
         });
 
-        // Menunggu redirect hingga URL berubah atau timeout
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 });
-        const finalUrl = page.url();
+        // LOGIKA KRUSIAL: Tunggu sampai URL bukan lagi sfl.gl atau link perantara
+        let currentUrl = page.url();
+        let timeoutReached = false;
+        const startTime = Date.now();
 
-        return { success: true, resultUrl: finalUrl };
+        // Loop selama 45 detik atau sampai URL berubah dari domain sfl.gl
+        while (currentUrl.includes('sfl.gl') || currentUrl.includes('__cf_chl')) {
+            if (Date.now() - startTime > 45000) {
+                timeoutReached = true;
+                break;
+            }
+            // Tunggu sebentar dan cek URL lagi
+            await new Promise(r => setTimeout(r, 2000));
+            currentUrl = page.url();
+        }
+
+        if (timeoutReached) {
+            throw new Error("Timeout: Gagal melewati Cloudflare atau halaman perantara sfl.gl");
+        }
+
+        return { 
+            success: true, 
+            resultUrl: currentUrl 
+        };
 
     } catch (error) {
         return { success: false, message: error.message };
     } finally {
-        if (browser !== null) {
-            await browser.close();
-        }
+        if (browser) await browser.close();
     }
 }
 
