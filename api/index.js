@@ -186,7 +186,7 @@ async function bypassShortlink(targetUrl) {
 
 async function savetube(link, quality, value) {
     try {
-        const cdnResponse = await axios.get("https://media.savetube.me/api/random-cdn");
+        const cdnResponse = await axios.get("https://media.savetube.vip/api/random-cdn");
         const cdn = cdnResponse.data.cdn;
 
         const infoget = await axios.post(`https://${cdn}/v2/info`, { 'url': link }, {
