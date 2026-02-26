@@ -1,5 +1,5 @@
 {
-  "name": "@febryjw/simple-api",
+  "name": "@febryjw/ytdl",
   "version": "1.0.0",
   "description": "YouTube Downloader API by FebryJW",
   "main": "api/index.js",
@@ -7,18 +7,22 @@
     "start": "node api/index.js",
     "dev": "node api/index.js"
   },
+  "keywords": [
+    "youtube",
+    "downloader",
+    "api",
+    "ytdl",
+    "mp3",
+    "audio"
+  ],
   "author": "FebryJW",
+  "license": "MIT",
   "dependencies": {
-    "axios": "^1.6.8",
-    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "yt-search": "^2.10.4",
-    "multer": "^1.4.5-lts.1",
-    "form-data": "^4.0.0",
-    "puppeteer-core": "22.6.0",
-    "@sparticuz/chromium": "123.0.1"
+    "cors": "^2.8.5",
+    "yt-search": "^2.10.4"
   },
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   }
 }
