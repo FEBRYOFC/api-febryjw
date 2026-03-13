@@ -1,20 +1,13 @@
 {
   "name": "@febryjw/ytdl",
   "version": "1.0.0",
-  "description": "YouTube Downloader API by FebryJW",
+  "description": "YouTube Audio Downloader API (Savetube) by FebryJW - Hanya audio 128kbps",
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js",
-    "dev": "node api/index.js"
+    "dev": "node api/index.js",
+    "vercel-build": "echo 'No build required'"
   },
-  "keywords": [
-    "youtube",
-    "downloader",
-    "api",
-    "ytdl",
-    "mp3",
-    "audio"
-  ],
   "author": "FebryJW",
   "license": "MIT",
   "dependencies": {
@@ -24,5 +17,11 @@
   },
   "engines": {
     "node": "22.x"
+  },
+  "private": false,
+  "homepage": "https://github.com/FEBRYOFC/api-febryjw",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FEBRYOFC/api-febryjw.git"
   }
 }
