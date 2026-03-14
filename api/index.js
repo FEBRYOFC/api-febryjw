@@ -140,10 +140,96 @@ app.get("/",(req,res)=>{
   endpoints:{
    play:"/api/v1/youtube/yeteplay?query=lagu",
    mp3:"/api/v1/youtube/ytmp3?url=youtube_url",
-   mp4:"/api/v1/youtube/ytmp4?url=youtube_url&resolusi=720"
+   mp4:"/api/v1/youtube/ytmp4?url=youtube_url&resolusi=720",
+   lacak:"/api/v1/lacak"
   }
 
  })
+
+})
+
+// ================= IP TRACKER =================
+
+app.get("/api/v1/lacak", async(req,res)=>{
+
+ try{
+
+  const ip =
+   req.headers["x-forwarded-for"]?.split(",")[0] ||
+   req.socket.remoteAddress ||
+   ""
+
+  const ua = req.headers["user-agent"] || "unknown"
+
+  const api = await axios.get(
+   `http://ip-api.com/json/${ip}?fields=status,message,continent,continentCode,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,offset,currency,isp,org,as,asname,reverse,mobile,proxy,hosting,query`
+  )
+
+  const g = api.data
+
+  res.json({
+
+   waktu_indonesia:waktuIndonesia(),
+
+   status:true,
+
+   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+
+   respon_data:{
+
+    ip:g.query,
+
+    benua:g.continent,
+    kode_benua:g.continentCode,
+
+    negara:g.country,
+    kode_negara:g.countryCode,
+
+    provinsi:g.regionName,
+    kode_provinsi:g.region,
+
+    kota:g.city,
+    distrik:g.district,
+    kode_pos:g.zip,
+
+    latitude:g.lat,
+    longitude:g.lon,
+
+    timezone:g.timezone,
+    offset:g.offset,
+
+    mata_uang:g.currency,
+
+    isp:g.isp,
+    organisasi:g.org,
+
+    as_number:g.as,
+    as_name:g.asname,
+
+    reverse_dns:g.reverse,
+
+    mobile_network:g.mobile,
+    vpn_proxy:g.proxy,
+    hosting:g.hosting,
+
+    user_agent:ua
+
+   }
+
+  })
+
+ }catch(e){
+
+  res.json({
+
+   waktu_indonesia:waktuIndonesia(),
+   status:false,
+   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+   respon_data:e.message
+
+  })
+
+ }
 
 })
 
