@@ -1,180 +1,297 @@
-// ========== [ IMPORT MODULE ] ==========
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const crypto = require("crypto");
 
-// ========== [ INISIALISASI APP ] ==========
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// ========== [ CLASS SAVETUBE ] ==========
+class Savetube {
+    constructor() {
+        this.ky = 'C5D58EF67A7584E4A29F6C35BBC4EB12';
+        this.hr = {
+            'content-type': 'application/json',
+            'origin': 'https://savetube.vip',
+            'user-agent': 'Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0'
+        };
+        this.fmt = ['144', '240', '360', '480', '720', '1080', 'mp3'];
+        this.m = /^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:shorts\/)?([a-zA-Z0-9_-]{11})/;
+        this.cdnList = ['cdn400.savetube.vip', 'cdn401.savetube.vip', 'cdn402.savetube.vip', 'cdn403.savetube.vip'];
+    }
+
+    async decrypt(enc) {
+        try {
+            const [sr, ky] = [Buffer.from(enc, 'base64'), Buffer.from(this.ky, 'hex')];
+            const [iv, dt] = [sr.slice(0, 16), sr.slice(16)];
+            const dc = crypto.createDecipheriv('aes-128-cbc', ky, iv);
+            return JSON.parse(Buffer.concat([dc.update(dt), dc.final()]).toString());
+        } catch (e) {
+            throw new Error(`Error while decrypting data: ${e.message}`);
+        }
+    }
+
+    async getCdn() {
+        // Coba ambil dari API random-cdn
+        try {
+            const response = await axios.get("https://media.savetube.vip/api/random-cdn", { 
+                headers: this.hr,
+                timeout: 5000 
+            });
+            if (response.data && response.data.cdn) {
+                console.log("CDN from API:", response.data.cdn);
+                return {
+                    status: true,
+                    data: response.data.cdn
+                };
+            }
+        } catch (error) {
+            console.log("Random CDN API failed, using fallback list");
+        }
+        
+        // Fallback: pilih random dari daftar CDN yang diketahui
+        const randomCdn = this.cdnList[Math.floor(Math.random() * this.cdnList.length)];
+        console.log("Using fallback CDN:", randomCdn);
+        return {
+            status: true,
+            data: randomCdn
+        };
+    }
+
+    async download(url, format = 'mp3') {
+        const id = url.match(this.m)?.[3];
+        if (!id) {
+            throw new Error("ID cannot be extracted from URL");
+        }
+        if (!format || !this.fmt.includes(format)) {
+            throw new Error(`Format not found. Available formats: ${this.fmt.join(', ')}`);
+        }
+        
+        const u = await this.getCdn();
+        if (!u.status) throw new Error("Failed to fetch CDN");
+        
+        console.log(`Using CDN: ${u.data} for video ID: ${id}`);
+        
+        const res = await axios.post(`https://${u.data}/v2/info`, {
+            url: `https://www.youtube.com/watch?v=${id}`
+        }, { 
+            headers: this.hr,
+            timeout: 15000 
+        });
+        
+        if (!res.data || !res.data.data) {
+            throw new Error("Invalid response from info endpoint");
+        }
+        
+        const dec = await this.decrypt(res.data.data);
+        
+        const dl = await axios.post(`https://${u.data}/download`, {
+            id: id,
+            downloadType: format === 'mp3' ? 'audio' : 'video',
+            quality: format === 'mp3' ? '128' : format,
+            key: dec.key
+        }, { 
+            headers: this.hr,
+            timeout: 20000 
+        });
+
+        if (!dl.data || !dl.data.data || !dl.data.data.downloadUrl) {
+            throw new Error("Invalid response from download endpoint");
+        }
+
+        return {
+            title: dec.title,
+            format: format,
+            thumbnail: dec.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+            duration: dec.duration,
+            url: dl.data.data.downloadUrl
+        };
+    }
+}
+
+// ========== [ INISIALISASI ] ==========
+const savetube = new Savetube();
 
 // ========== [ FUNGSI WAKTU INDONESIA ] ==========
 function waktuIndonesia() {
-  return new Date().toLocaleString("id-ID", {
-    timeZone: "Asia/Jakarta",
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  });
+    return new Date().toLocaleString("id-ID", {
+        timeZone: "Asia/Jakarta",
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    });
 }
 
-// ========== [ ENDPOINT UTAMA / ] ==========
+// ========== [ ENDPOINT UTAMA ] ==========
 app.get("/", (req, res) => {
-  res.json({
-    status: true,
-    author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-    result: {
-      message: "YouTube MP3 Downloader (via ssyoutube.online)",
-      endpoint: {
-        ytmp3: "/api/v1/youtube/ytmp3?url=... (YouTube links only)"
-      }
-    },
-    timestamp: new Date().toISOString(),
-    response_time: "0ms"
-  });
+    res.json({
+        status: true,
+        creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+        message: "YouTube Downloader API (Savetube)",
+        endpoints: {
+            ytmp3: "/api/ytmp3?url=YOUTUBE_URL",
+            ytmp4: "/api/ytmp4?url=YOUTUBE_URL&quality=720",
+            info: "/api/info?url=YOUTUBE_URL"
+        },
+        timestamp: new Date().toISOString()
+    });
 });
 
 // ========== [ ENDPOINT YTMP3 ] ==========
-app.get("/api/v1/youtube/ytmp3", async (req, res) => {
-  const start = Date.now();
-  
-  try {
-    const { url } = req.query;
+app.get("/api/ytmp3", async (req, res) => {
+    const start = Date.now();
     
-    if (!url) {
-      return res.status(400).json({
-        status: false,
-        author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-        result: "Parameter 'url' diperlukan",
-        timestamp: new Date().toISOString(),
-        response_time: `${Date.now() - start}ms`
-      });
-    }
-
-    // Validasi URL YouTube
-    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
-    if (!youtubeRegex.test(url)) {
-      return res.status(400).json({
-        status: false,
-        author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-        result: "URL tidak valid. Hanya YouTube yang didukung",
-        timestamp: new Date().toISOString(),
-        response_time: `${Date.now() - start}ms`
-      });
-    }
-
-    // ========== PAKAI ENDPOINT YANG SUDAH TERBUKTI BERHASIL ==========
-    // Dari data network: POST ke admin-ajax.php dengan nonce 524cb0966c
-    // yang mengembalikan {"success":true,"data":{"proxiedUrl":"https://..."}}
-    
-    const formData = new URLSearchParams();
-    formData.append("action", "new_analytics_track");
-    formData.append("nonce", "524cb0966c"); // Pakai nonce yang sudah terbukti work
-    formData.append("quality", "MP3");
-    formData.append("quality_version", "0-100 MB");
-
-    console.log("Mengirim request ke admin-ajax.php...");
-    
-    const response = await axios.post(
-      "https://ssyoutube.online/wp-admin/admin-ajax.php",
-      formData,
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Referer": "https://ssyoutube.online/yt-video-detail/",
-          "X-Requested-With": "XMLHttpRequest"
+    try {
+        const { url } = req.query;
+        
+        if (!url) {
+            return res.status(400).json({
+                status: false,
+                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                error: "Parameter 'url' diperlukan",
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
         }
-      }
-    );
 
-    console.log("Response status:", response.status);
-    console.log("Response data:", JSON.stringify(response.data, null, 2));
+        const result = await savetube.download(url, "mp3");
 
-    const data = response.data;
-    
-    if (!data.success || !data.data) {
-      throw new Error(data.data?.error || "Gagal mendapatkan URL download");
+        res.json({
+            status: true,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            result: {
+                title: result.title,
+                duration: result.duration,
+                thumbnail: result.thumbnail,
+                url: result.url,
+                format: "mp3",
+                quality: "128kbps"
+            },
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+
+    } catch (error) {
+        console.error("YTMP3 Error:", error.message);
+        
+        res.status(500).json({
+            status: false,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            error: error.message,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
     }
-
-    // Dari data network, respons bisa berupa:
-    // 1. {success: true, data: {proxiedUrl: "https://..."}}
-    // 2. {success: true, data: {status: "tunnel", url: "https://...", filename: "...", duration: ...}}
-    
-    let downloadUrl = data.data.proxiedUrl || data.data.url;
-    let filename = data.data.filename || "audio.mp3";
-    let title = filename.replace(/\.mp3$/, "").replace(/\s*\(youtube\)\s*$/, "");
-    let duration = data.data.duration || 0;
-
-    // Jika ada status tunnel, mungkin perlu request kedua
-    if (data.data.status === "tunnel") {
-      console.log("Mendapatkan tunnel URL...");
-      
-      const tunnelResponse = await axios.post(
-        "https://ssyoutube.online/wp-admin/admin-ajax.php",
-        new URLSearchParams({
-          action: "new_analytics_track",
-          nonce: "524cb0966c"
-        }),
-        {
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://ssyoutube.online/yt-video-detail/",
-            "X-Requested-With": "XMLHttpRequest"
-          }
-        }
-      );
-      
-      const tunnelData = tunnelResponse.data;
-      console.log("Tunnel response:", tunnelData);
-      
-      if (tunnelData.success && tunnelData.data) {
-        downloadUrl = tunnelData.data.url || tunnelData.data.proxiedUrl;
-        filename = tunnelData.data.filename || filename;
-        title = filename.replace(/\.mp3$/, "").replace(/\s*\(youtube\)\s*$/, "");
-        duration = tunnelData.data.duration || duration;
-      }
-    }
-
-    const result = {
-      status: true,
-      author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-      result: {
-        title: title,
-        filename: filename,
-        duration: duration,
-        url: downloadUrl,
-        format: "mp3",
-        quality: "128kbps"
-      },
-      timestamp: new Date().toISOString(),
-      response_time: `${Date.now() - start}ms`
-    };
-
-    res.json(result);
-
-  } catch (error) {
-    console.error("ERROR DETAILS:", {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    });
-    
-    res.status(500).json({
-      status: false,
-      author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-      result: error.message || "Terjadi kesalahan saat memproses permintaan",
-      timestamp: new Date().toISOString(),
-      response_time: `${Date.now() - start}ms`
-    });
-  }
 });
 
-// ========== [ EXPORT MODULE ] ==========
+// ========== [ ENDPOINT YTMP4 ] ==========
+app.get("/api/ytmp4", async (req, res) => {
+    const start = Date.now();
+    
+    try {
+        const { url, quality = "720" } = req.query;
+        
+        if (!url) {
+            return res.status(400).json({
+                status: false,
+                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                error: "Parameter 'url' diperlukan",
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
+        }
+
+        const result = await savetube.download(url, quality);
+
+        res.json({
+            status: true,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            result: {
+                title: result.title,
+                duration: result.duration,
+                thumbnail: result.thumbnail,
+                url: result.url,
+                format: "mp4",
+                quality: quality + "p"
+            },
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+
+    } catch (error) {
+        console.error("YTMP4 Error:", error.message);
+        
+        res.status(500).json({
+            status: false,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            error: error.message,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    }
+});
+
+// ========== [ ENDPOINT INFO ] ==========
+app.get("/api/info", async (req, res) => {
+    const start = Date.now();
+    
+    try {
+        const { url } = req.query;
+        
+        if (!url) {
+            return res.status(400).json({
+                status: false,
+                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                error: "Parameter 'url' diperlukan",
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
+        }
+
+        const id = url.match(savetube.m)?.[3];
+        if (!id) {
+            throw new Error("ID cannot be extracted from URL");
+        }
+
+        const u = await savetube.getCdn();
+        const info = await axios.post(`https://${u.data}/v2/info`, {
+            url: `https://www.youtube.com/watch?v=${id}`
+        }, { 
+            headers: savetube.hr,
+            timeout: 10000 
+        });
+
+        const dec = await savetube.decrypt(info.data.data);
+
+        res.json({
+            status: true,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            result: {
+                title: dec.title,
+                duration: dec.duration,
+                thumbnail: dec.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+                formats: savetube.fmt
+            },
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+
+    } catch (error) {
+        console.error("INFO Error:", error.message);
+        
+        res.status(500).json({
+            status: false,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            error: error.message,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    }
+});
+
 module.exports = app;
