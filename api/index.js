@@ -26,6 +26,23 @@ function waktuIndonesia(){
 
 }
 
+function sendResponse(res,start,result,status=true){
+
+ res.json({
+
+  waktu_indonesia: waktuIndonesia(),
+  status: status,
+  creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+
+  result: result,
+
+  timestamp: new Date().toISOString(),
+
+  response_time: `${Date.now()-start}ms`
+
+ })
+
+}
 // ================= DETECTION =================
 
 function detectOS(ua){
@@ -127,6 +144,8 @@ class Savetube{
 
  async getCdn(){
 
+ try{
+
   if(CDN_CACHE && Date.now() - CDN_TIME < 300000){
    return CDN_CACHE
   }
@@ -140,11 +159,18 @@ class Savetube{
 
   return CDN_CACHE
 
+ }catch{
+
+  return "cdn403.savetube.vip"
+
  }
+
+}
 
  async download(url,format="mp3"){
 
-  const id = url.match(this.regex)?.[3]
+  const clean = url.split("&")[0].split("?si=")[0]
+const id = clean.match(this.regex)?.[3]
 
   if(!id) throw new Error("URL youtube tidak valid")
 
@@ -209,6 +235,8 @@ app.get("/",(req,res)=>{
 
 app.get("/api/v1/lacak", async(req,res)=>{
 
+ const start = Date.now()
+
  try{
 
   const ipQuery = req.query.ip
@@ -229,67 +257,52 @@ app.get("/api/v1/lacak", async(req,res)=>{
 
   const maps = `https://www.google.com/maps?q=${g.lat},${g.lon}`
 
-  res.json({
+  sendResponse(res,start,{
 
-   waktu_indonesia:waktuIndonesia(),
-   status:true,
-   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+   ip:g.query,
 
-   respon_data:{
+   lokasi:{
+    benua:g.continent,
+    negara:g.country,
+    provinsi:g.regionName,
+    kota:g.city,
+    kode_pos:g.zip
+   },
 
-    ip:g.query,
+   koordinat:{
+    latitude:g.lat,
+    longitude:g.lon,
+    google_maps:maps
+   },
 
-    lokasi:{
-     benua:g.continent,
-     negara:g.country,
-     provinsi:g.regionName,
-     kota:g.city,
-     kode_pos:g.zip
-    },
+   jaringan:{
+    isp:g.isp,
+    organisasi:g.org,
+    as:g.as,
+    as_name:g.asname,
+    tipe:tipeJaringan(g),
+    mobile_network:g.mobile,
+    vpn_proxy:g.proxy,
+    hosting:g.hosting
+   },
 
-    koordinat:{
-     latitude:g.lat,
-     longitude:g.lon,
-     google_maps:maps
-    },
+   sistem:{
+    os:detectOS(ua),
+    browser:detectBrowser(ua),
+    bot_request:detectBot(ua),
+    user_agent:ua
+   },
 
-    jaringan:{
-     isp:g.isp,
-     organisasi:g.org,
-     as:g.as,
-     as_name:g.asname,
-     tipe:tipeJaringan(g),
-     mobile_network:g.mobile,
-     vpn_proxy:g.proxy,
-     hosting:g.hosting
-    },
-
-    sistem:{
-     os:detectOS(ua),
-     browser:detectBrowser(ua),
-     bot_request:detectBot(ua),
-     user_agent:ua
-    },
-
-    waktu:{
-     timezone:g.timezone,
-     offset:g.offset
-    }
-
+   waktu:{
+    timezone:g.timezone,
+    offset:g.offset
    }
 
-  })
+  },true)
 
  }catch(e){
 
-  res.json({
-
-   waktu_indonesia:waktuIndonesia(),
-   status:false,
-   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-   respon_data:e.message
-
-  })
+  sendResponse(res,start,e.message,false)
 
  }
 
@@ -298,6 +311,8 @@ app.get("/api/v1/lacak", async(req,res)=>{
 // ================= YOUTUBE PLAY =================
 
 app.get("/api/v1/youtube/yeteplay", async(req,res)=>{
+
+ const start = Date.now()
 
  try{
 
@@ -311,37 +326,26 @@ app.get("/api/v1/youtube/yeteplay", async(req,res)=>{
 
   const data = await savetube.download(video.url,"mp3")
 
-  res.json({
-
-   waktu_indonesia:waktuIndonesia(),
-   status:true,
-   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-
-   respon_data:{
-    title:video.title,
-    duration:video.seconds,
-    thumbnail:video.thumbnail,
-    url:data.url
-   }
-
-  })
+  sendResponse(res,start,{
+   title:video.title,
+   duration:video.seconds,
+   thumbnail:video.thumbnail,
+   url:data.url
+  },true)
 
  }catch(e){
 
-  res.json({
-   waktu_indonesia:waktuIndonesia(),
-   status:false,
-   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-   respon_data:e.message
-  })
+  sendResponse(res,start,e.message,false)
 
  }
 
-})
+})j
 
 // ================= YTMP3 =================
 
 app.get("/api/v1/youtube/ytmp3", async(req,res)=>{
+
+ const start = Date.now()
 
  try{
 
@@ -351,24 +355,11 @@ app.get("/api/v1/youtube/ytmp3", async(req,res)=>{
 
   const data = await savetube.download(url,"mp3")
 
-  res.json({
-
-   waktu_indonesia:waktuIndonesia(),
-   status:true,
-   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-
-   respon_data:data
-
-  })
+  sendResponse(res,start,data,true)
 
  }catch(e){
 
-  res.json({
-   waktu_indonesia:waktuIndonesia(),
-   status:false,
-   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-   respon_data:e.message
-  })
+  sendResponse(res,start,e.message,false)
 
  }
 
@@ -377,6 +368,8 @@ app.get("/api/v1/youtube/ytmp3", async(req,res)=>{
 // ================= YTMP4 =================
 
 app.get("/api/v1/youtube/ytmp4", async(req,res)=>{
+
+ const start = Date.now()
 
  try{
 
@@ -388,24 +381,11 @@ app.get("/api/v1/youtube/ytmp4", async(req,res)=>{
 
   const data = await savetube.download(url,quality)
 
-  res.json({
-
-   waktu_indonesia:waktuIndonesia(),
-   status:true,
-   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-
-   respon_data:data
-
-  })
+  sendResponse(res,start,data,true)
 
  }catch(e){
 
-  res.json({
-   waktu_indonesia:waktuIndonesia(),
-   status:false,
-   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-   respon_data:e.message
-  })
+  sendResponse(res,start,e.message,false)
 
  }
 
