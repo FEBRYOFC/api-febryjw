@@ -75,29 +75,55 @@ class Savetube {
 const savetube = new Savetube();
 
 // ================= ENDPOINT YTPLAY (SEARCH + MP3) =================
+// ================= ENDPOINT YTPLAY (SEARCH + MP3) =================
 app.get("/api/v1/youtube/ytplay", async (req, res) => {
     const start = Date.now();
     try {
         const { query } = req.query;
-        if (!query) throw new Error("Parameter 'query' diperlukan");
+        if (!query) {
+            return res.status(400).json({
+                status: false,
+                author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                result: "Parameter 'query' diperlukan",
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
+        }
 
+        // Lakukan pencarian dengan yts
         const search = await yts(query);
-        const video = search.videos[0];
-        if (!video) throw new Error("Video tidak ditemukan");
+        
+        // Ambil video pertama
+        const video = search.videos?.[0];
+        if (!video) {
+            return res.status(404).json({
+                status: false,
+                author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                result: "Tidak ditemukan video untuk kata kunci tersebut",
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
+        }
 
+        // Unduh audio menggunakan savetube
         const download = await savetube.download(video.url, "mp3");
 
         res.json({
             status: true,
             author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
             result: {
-                title: video.title,
-                videoId: video.videoId,
-                duration: video.duration,
-                thumbnail: video.thumbnail,
+                query: query,
+                video: {
+                    title: video.title,
+                    videoId: video.videoId,
+                    duration: video.duration,
+                    thumbnail: video.thumbnail,
+                    url: video.url
+                },
                 download: {
                     title: download.title,
                     format: download.format,
+                    thumbnail: download.thumbnail,
                     duration: download.duration,
                     url: download.url
                 }
@@ -106,10 +132,11 @@ app.get("/api/v1/youtube/ytplay", async (req, res) => {
             response_time: `${Date.now() - start}ms`
         });
     } catch (error) {
-        res.json({
+        console.error("Error di ytplay:", error);
+        res.status(500).json({
             status: false,
             author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-            result: error.message,
+            result: error.message || "Terjadi kesalahan internal",
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
