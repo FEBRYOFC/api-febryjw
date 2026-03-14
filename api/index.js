@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const crypto = require("crypto");
+const yts = require("yt-search");
 
 const app = express();
 app.use(cors());
@@ -13,12 +14,21 @@ class Savetube {
         this.ky = 'C5D58EF67A7584E4A29F6C35BBC4EB12';
         this.hr = {
             'content-type': 'application/json',
-            'origin': 'https://savetube.vip',
+            'origin': 'https://yt.savetube.vip',
             'user-agent': 'Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0'
         };
         this.fmt = ['144', '240', '360', '480', '720', '1080', 'mp3'];
-        this.m = /^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:shorts\/)?([a-zA-Z0-9_-]{11})/;
+        this.m = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
         this.cdnList = ['cdn400.savetube.vip', 'cdn401.savetube.vip', 'cdn402.savetube.vip', 'cdn403.savetube.vip'];
+    }
+
+    cleanUrl(url) {
+        return url.split('?')[0].split('&')[0];
+    }
+
+    extractVideoId(url) {
+        const match = url.match(this.m);
+        return match ? match[1] : null;
     }
 
     async decrypt(enc) {
@@ -33,45 +43,36 @@ class Savetube {
     }
 
     async getCdn() {
-        // Coba ambil dari API random-cdn
         try {
             const response = await axios.get("https://media.savetube.vip/api/random-cdn", { 
                 headers: this.hr,
                 timeout: 5000 
             });
             if (response.data && response.data.cdn) {
-                console.log("CDN from API:", response.data.cdn);
-                return {
-                    status: true,
-                    data: response.data.cdn
-                };
+                return { status: true, data: response.data.cdn };
             }
         } catch (error) {
             console.log("Random CDN API failed, using fallback list");
         }
         
-        // Fallback: pilih random dari daftar CDN yang diketahui
         const randomCdn = this.cdnList[Math.floor(Math.random() * this.cdnList.length)];
-        console.log("Using fallback CDN:", randomCdn);
-        return {
-            status: true,
-            data: randomCdn
-        };
+        return { status: true, data: randomCdn };
     }
 
     async download(url, format = 'mp3') {
-        const id = url.match(this.m)?.[3];
+        const cleanVideoUrl = this.cleanUrl(url);
+        const id = this.extractVideoId(cleanVideoUrl);
+        
         if (!id) {
-            throw new Error("ID cannot be extracted from URL");
+            throw new Error("Gagal mengekstrak ID YouTube dari URL");
         }
+        
         if (!format || !this.fmt.includes(format)) {
-            throw new Error(`Format not found. Available formats: ${this.fmt.join(', ')}`);
+            throw new Error(`Format tidak tersedia. Pilih: ${this.fmt.join(', ')}`);
         }
         
         const u = await this.getCdn();
-        if (!u.status) throw new Error("Failed to fetch CDN");
-        
-        console.log(`Using CDN: ${u.data} for video ID: ${id}`);
+        if (!u.status) throw new Error("Gagal mendapatkan CDN");
         
         const res = await axios.post(`https://${u.data}/v2/info`, {
             url: `https://www.youtube.com/watch?v=${id}`
@@ -81,7 +82,7 @@ class Savetube {
         });
         
         if (!res.data || !res.data.data) {
-            throw new Error("Invalid response from info endpoint");
+            throw new Error("Respon tidak valid dari endpoint info");
         }
         
         const dec = await this.decrypt(res.data.data);
@@ -97,7 +98,7 @@ class Savetube {
         });
 
         if (!dl.data || !dl.data.data || !dl.data.data.downloadUrl) {
-            throw new Error("Invalid response from download endpoint");
+            throw new Error("Respon tidak valid dari endpoint download");
         }
 
         return {
@@ -132,18 +133,21 @@ app.get("/", (req, res) => {
     res.json({
         status: true,
         creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-        message: "YouTube Downloader API (Savetube)",
-        endpoints: {
-            ytmp3: "/api/ytmp3?url=YOUTUBE_URL",
-            ytmp4: "/api/ytmp4?url=YOUTUBE_URL&quality=720",
-            info: "/api/info?url=YOUTUBE_URL"
+        result: {
+            message: "YouTube Downloader API (Savetube)",
+            endpoints: {
+                ytmp3: "/api/v1/youtube/ytmp3?url=YOUTUBE_URL",
+                ytmp4: "/api/v1/youtube/ytmp4?url=YOUTUBE_URL&resolusi=720",
+                ytplay: "/api/v1/youtube/ytplay?query=stecu stecu"
+            }
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        response_time: "0ms"
     });
 });
 
 // ========== [ ENDPOINT YTMP3 ] ==========
-app.get("/api/ytmp3", async (req, res) => {
+app.get("/api/v1/youtube/ytmp3", async (req, res) => {
     const start = Date.now();
     
     try {
@@ -153,7 +157,7 @@ app.get("/api/ytmp3", async (req, res) => {
             return res.status(400).json({
                 status: false,
                 creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-                error: "Parameter 'url' diperlukan",
+                result: "Parameter 'url' diperlukan",
                 timestamp: new Date().toISOString(),
                 response_time: `${Date.now() - start}ms`
             });
@@ -177,12 +181,10 @@ app.get("/api/ytmp3", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("YTMP3 Error:", error.message);
-        
         res.status(500).json({
             status: false,
             creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-            error: error.message,
+            result: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
@@ -190,23 +192,23 @@ app.get("/api/ytmp3", async (req, res) => {
 });
 
 // ========== [ ENDPOINT YTMP4 ] ==========
-app.get("/api/ytmp4", async (req, res) => {
+app.get("/api/v1/youtube/ytmp4", async (req, res) => {
     const start = Date.now();
     
     try {
-        const { url, quality = "720" } = req.query;
+        const { url, resolusi = "720" } = req.query;
         
         if (!url) {
             return res.status(400).json({
                 status: false,
                 creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-                error: "Parameter 'url' diperlukan",
+                result: "Parameter 'url' diperlukan",
                 timestamp: new Date().toISOString(),
                 response_time: `${Date.now() - start}ms`
             });
         }
 
-        const result = await savetube.download(url, quality);
+        const result = await savetube.download(url, resolusi);
 
         res.json({
             status: true,
@@ -217,77 +219,88 @@ app.get("/api/ytmp4", async (req, res) => {
                 thumbnail: result.thumbnail,
                 url: result.url,
                 format: "mp4",
-                quality: quality + "p"
+                quality: resolusi + "p"
             },
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
 
     } catch (error) {
-        console.error("YTMP4 Error:", error.message);
-        
         res.status(500).json({
             status: false,
             creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-            error: error.message,
+            result: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     }
 });
 
-// ========== [ ENDPOINT INFO ] ==========
-app.get("/api/info", async (req, res) => {
+// ========== [ ENDPOINT YTPLAY ] ==========
+app.get("/api/v1/youtube/ytplay", async (req, res) => {
     const start = Date.now();
     
     try {
-        const { url } = req.query;
+        const { query } = req.query;
         
-        if (!url) {
+        if (!query) {
             return res.status(400).json({
                 status: false,
                 creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-                error: "Parameter 'url' diperlukan",
+                result: "Parameter 'query' diperlukan",
                 timestamp: new Date().toISOString(),
                 response_time: `${Date.now() - start}ms`
             });
         }
 
-        const id = url.match(savetube.m)?.[3];
-        if (!id) {
-            throw new Error("ID cannot be extracted from URL");
+        // Cari video di YouTube
+        const search = await yts(query);
+        
+        if (!search.videos || search.videos.length === 0) {
+            return res.status(404).json({
+                status: false,
+                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                result: "Tidak ditemukan video untuk kata kunci tersebut",
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
         }
 
-        const u = await savetube.getCdn();
-        const info = await axios.post(`https://${u.data}/v2/info`, {
-            url: `https://www.youtube.com/watch?v=${id}`
-        }, { 
-            headers: savetube.hr,
-            timeout: 10000 
-        });
-
-        const dec = await savetube.decrypt(info.data.data);
+        const video = search.videos[0];
+        
+        // Download MP3 dari video pertama
+        const download = await savetube.download(video.url, "mp3");
 
         res.json({
             status: true,
             creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
             result: {
-                title: dec.title,
-                duration: dec.duration,
-                thumbnail: dec.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-                formats: savetube.fmt
+                query: query,
+                video: {
+                    title: video.title,
+                    videoId: video.videoId,
+                    duration: video.duration,
+                    thumbnail: video.thumbnail,
+                    url: video.url
+                },
+                download: {
+                    title: download.title,
+                    duration: download.duration,
+                    thumbnail: download.thumbnail,
+                    url: download.url,
+                    format: "mp3",
+                    quality: "128kbps"
+                }
             },
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
 
     } catch (error) {
-        console.error("INFO Error:", error.message);
-        
         res.status(500).json({
             status: false,
             creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-            error: error.message,
+            result: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
