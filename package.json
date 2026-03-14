@@ -16,7 +16,7 @@
     "yt-search": "^2.10.4"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "private": false,
   "homepage": "https://github.com/FEBRYOFC/api-febryjw",
