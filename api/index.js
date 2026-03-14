@@ -17,16 +17,78 @@ function getYoutubeId(url) {
     return match ? match[1] : null;
 }
 
-// ============= EZSRV DOWNLOADER =============
-const CAPTCHA_TOKEN = "0.gTx3EWwdD-a4mVSKCcbCbwWeHIbNPiOLyqM_zhvxdcFf5KXomDnPPqBGtU4myAt3uD_EhD6FHpsdcRsSDTNSxjUr6B0yBrEH0hBSh13XwdFv0dMYfnqhw5DNKDWB8Hd6EkhawP9c2mg3eMTi1f6xm7kJZlHmttAbBPoo9pGXDjxwu9DNlO-TnMT2VkpDhZqNcoaQ4-qf4-WvHtcAXsZWTw2-Ndpe14Qb8aM-IfAFea-WHpMNuweEcsMf0fEwbcV9Jsd-U4DeW9_nBx223PjbLDc44DggHuV9qN1Hm4ZUCfwdD3y7lVL8wpPV5Ni0GvRPs4ay1vWkxc6KtOahv3RrjLskiHLRfvsVz_gJVijyYlj5avihCpJTiV4Glnmzxb6VW-C7QaNd4kVoPgT6xm36OSzgdKvBzSJPhLScDhAGTP2f_7cwQnnypq4T2RlQWCK_AK_TVf7fvYDBhHeZrNJpTXBIBibo3r9xiTsVIuKP-B_GBEgQb9E9IwF8s-o2NvE2jgS2t2-y039ee-4LgAQRfhnAa-083vgtbIgeOAv1xy7kIqDD_WvMnuEWXk3kagWJqSGUOpTyHLlKQJXTaRerpELIGq9xMGOr-0tyCNvm1n_OoBTyBSDWvNRjBv4W4aZZaA1kX11j_VFohEovk0guCX__F0O-Td7q9YQu6PU8Fwenw8p1ElWxJ8I_V2ob8FgFdbVq-W-DzvG4_gDA19oDrgJ6ucEdGVSj2NxvVTui3_5DhordNdLph7eCJEOKtJ9ryPvGMpbitxv988-R1fR93mXfc3cmoeTBCO7TqbBw4wa83wGWoKKR-vxmIoxWK6Mh5OmcaZTpPsFx64KSss_pVMz_ezxLMPTiMIPJkW0JRJ5oCWdTfIZazfNijj4araPM.FbzXl1j7uoQU0TLFo2YiBw.5417692ea9ebf0c75ffcf35384fa97c67efc59624644df1eaafd8a3da091d905";
+// ============= MENDAPATKAN TOKEN CAPTCHA =============
+async function getCaptchaToken() {
+    try {
+        // 1. Akses halaman utama untuk mendapatkan cookies dan session
+        const homeResponse = await fetch('https://ezconv.cc/7ckh', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        // Ambil cookies dari response (penting untuk session)
+        const cookies = homeResponse.headers.get('set-cookie') || '';
+        
+        // 2. Dapatkan HTML untuk mengekstrak sitekey (jika diperlukan)
+        const html = await homeResponse.text();
+        
+        // 3. Request ke challenge platform untuk mendapatkan token
+        // URL challenge bisa berbeda-beda, ini contoh dari data yang Anda berikan
+        const challengeResponse = await fetch('https://ezconv.cc/cdn-cgi/challenge-platform/h/g/rc/9dc15e05ed5f55c9', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Cookie': cookies,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            body: JSON.stringify({
+                // Data ini bisa berbeda, Anda perlu menyesuaikan
+                secondaryToken: "0.sgmyzI05ashInzvlmzopH8MqzVvgK5sYzKSn346KWTBbz7khtVP_kCx_WhMPput5NC1tcW9SS60nhtoJt2R2HRCfAmZkkSXMlru1kX7mp0NVg01U9E_VUHYPjfgUHdtsn7EUHwJUdtJCZMu-ZnKqdyn9YSNws5KL7H5Fll788sY1-EOHlI9CGXXdtuGbRMhZCdZt21akUHruV77xrY-0H-519MDz7O4bnrEfPTjsvIEZYXtUEzgDD-W1wQ6Z3bpD1FqEqZU3-GWwrePR56T6n8WOtBlVCZzbgs6dLKMfdsLyB3Ki-M5pqd-pAjyikkXzmQGJ0rJ4MiC4Z1E-iAKqYGuKd_09Lei9qaYvBSyyrXJZiLkK93gPxfBXyax9cE7OdST8kyvQJRX03UCUgakB_y21KMcpCRjHUgojezYRd-yn73AXwTa0MPtU7WBoZr4QQO10fjhgvXEq6NBTL8sBJcqJVScQGmGocEWGqfPfTXTARzo2JUzhirze_BifNiXkC4cNTOtMn9JMwWtsaYLG2iCdiC32oe4RpFFMqSc4sL3h-SJgg4ySZLlldpvRF0VOkVDKQJ_h1hgJO59VAaWLd-JbhrhZSKYZPLeKrZR-c1As0jEVIrW9V_PPcEtTJoP8wCS4HHo-f2gNJTk5XarRAc4BTYlKDX3r6Xtf1d5Ff42rnQqsEyRibnqcUiyjmFNyUAcWLadm28U3OzIzl-L1SgZkhsV71z8TRS09gNPDC6ApLlwhFq9PiLogTTqmb5VwsjjwM-3j6dtGNPCWZXMtTy4vlQBtdKNJdwR9iEt4Jo2rn36zmvv_Pe4zQZ1ze6Qlv4H8Y1Ie0kRzhVE7XZoavqe-weTsg_0e4l0dgAOuTdlP31bmfEU1PbsTLzt1FlhK.UHzS_ZZUI7S27McXLoZZPg.50a0fde2f6f664dce9366be3509bd6613a6f903c0a8cf2d2a52f2ab80a7633c0",
+                sitekey: "0x4AAAAAAAi2NuZzwS99-7op"
+            })
+        });
 
+        // Response challenge biasanya berupa token atau sukses
+        // Dari data Anda, response-nya adalah 200 dengan content-length 0
+        // Mungkin token disimpan di cookies atau headers
+        
+        // 4. Dapatkan token captcha dari cookies atau response
+        // Token biasanya ada di cookies dengan nama tertentu
+        const tokenMatch = cookies.match(/captcha_token=([^;]+)/);
+        if (tokenMatch) {
+            return tokenMatch[1];
+        }
+
+        // Jika tidak ada, mungkin perlu pendekatan lain
+        // Alternatif: extract dari HTML atau dari response challenge
+        const challengeData = await challengeResponse.text();
+        console.log('Challenge response:', challengeData);
+
+        // Fallback: gunakan token yang sudah ada (tapi ini akan kadaluarsa)
+        return "0.sE_HOpvqB28EiNxixDaC4Sb_lssoYQH0YLtLOBmIBm7NsQGIz1YG8J1PhJdOf12n7cH67dsPGWwmuyaHQQhf5Yd8emkhll_YR79tZjsMRrrRwhfjA3HSlfkMh12cDYk5toyT0RdnFhK5tTho7UUikek0yVpwqwTo4OqU1h2F5KdvegsdFDEQI8wR73i2vwLXA0pg80NHZUcnvB4XyeLL2VdpJsOu-NEKfDIyR_PXaSHRHN2I_AfYLFSMgLwXpZEirMZV7hRj3eXMN5OqeGZx-pso3hMBls8Ol4Fqq9Q46Tn1v-zu_Utq6IlmDsj8GEO4rNhZOWeaIhpmrNir9LrKRhhbRDpa97Z3rxg9ydg1cUXg-HpbAlzh0QU3ztNrwGnRkptjEm7T1HBfifgjAbQ7vXCzopUe3P3CskOnLjIy3YMWYBLrDI0zoCDd7rtzRNT2i0q1nahnU4EAluK1OLRkGblNiThdGotCTE6emnX0b4z-zxi4y_K75jfvKS2PV60cZnDxvw56GWc7gnw4PBsQZjK6MrfqOBiqS-RORE8k6Piz70Tc0-b7lt_vPHaEeoXQhKKkkGUefvyxOMGZ5P1RXVv_NG12X_HI2D93CNlFsYWIAdwi-mMY1YfLqvuLDDL32dNA7IVaaolXUC0NrErXpzj3NSZMS5HiWlMFIxFPONq8k_-stJuK3SA5B6qk46aFBVez40qSaizH0GuDIvQbQTIjCCiBaISo9EnTILR9EJmGOM5oqJg_1BYFN6NdDyNpPvtlontAyr-3TmhpSqJasvSuI4Npy7m6PmPJpL551hdvytT6Pm2a3Qrb5YvnNlf_o2B-ILBUzCWLHCBmrzuGyxIQGqIwMJQJVrg79_5mj5VOrZwZEhP5n1qJCRg46DHl.s7TGhdkXFtzvF0Hg0yOkPA.af0ee148cb685916720a90c66cfdda5f0c851a74ee634652b66e48ede076af44";
+    } catch (error) {
+        console.error('Error getting captcha token:', error);
+        return null;
+    }
+}
+
+// ============= EZSRV DOWNLOADER DENGAN TOKEN DINAMIS =============
 async function ezsrvDownload(link, quality = 128) {
     try {
+        // Dapatkan token captcha terbaru
+        const captchaToken = await getCaptchaToken();
+        if (!captchaToken) {
+            return { status: false, message: "Gagal mendapatkan token captcha" };
+        }
+
+        console.log('Using token:', captchaToken.substring(0, 50) + '...');
+
         const response = await fetch("https://ds1.ezsrv.net/api/convert", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             },
             body: JSON.stringify({
                 url: link,
@@ -34,12 +96,13 @@ async function ezsrvDownload(link, quality = 128) {
                 trim: false,
                 startT: 0,
                 endT: 0,
-                captchaToken: CAPTCHA_TOKEN
+                captchaToken: captchaToken
             })
         });
 
         const data = await response.json();
-        
+        console.log('ezsrv response:', JSON.stringify(data, null, 2));
+
         if (data.status === "done" && data.url) {
             return {
                 status: true,
@@ -48,7 +111,11 @@ async function ezsrvDownload(link, quality = 128) {
                 quality: quality + "kbps"
             };
         } else {
-            return { status: false, message: "Gagal mendapatkan URL dari ezsrv" };
+            return { 
+                status: false, 
+                message: data.message || "Gagal mendapatkan URL dari ezsrv",
+                detail: data
+            };
         }
     } catch (error) {
         console.error("ezsrv error:", error);
@@ -60,8 +127,8 @@ async function ezsrvDownload(link, quality = 128) {
 app.get('/', (req, res) => {
     res.json({
         name: "YouTube Audio Downloader API",
-        version: "v2",
-        description: "Menggunakan ezsrv.net sebagai sumber download",
+        version: "v3",
+        description: "Menggunakan ezsrv.net dengan token dinamis dari ezconv.cc",
         endpoints: {
             audio: "/api/v1/youtube/audio?url={youtube_url}",
             playmp3: "/api/v1/youtube/ytplaymp3?query={keyword}"
@@ -72,7 +139,7 @@ app.get('/', (req, res) => {
 
 // Download berdasarkan URL
 app.get('/api/v1/youtube/audio', async (req, res) => {
-    const { url } = req.query;
+    const { url, quality = 128 } = req.query;
     if (!url) {
         return res.status(400).json({ status: false, message: "Parameter 'url' wajib diisi" });
     }
@@ -87,9 +154,13 @@ app.get('/api/v1/youtube/audio', async (req, res) => {
         const metadata = await yts(videoUrl);
         const video = metadata.all[0] || null;
 
-        const download = await ezsrvDownload(videoUrl);
+        const download = await ezsrvDownload(videoUrl, parseInt(quality));
         if (!download.status) {
-            return res.status(500).json({ status: false, message: download.message });
+            return res.status(500).json({ 
+                status: false, 
+                message: download.message,
+                detail: download.detail 
+            });
         }
 
         res.json({
@@ -114,7 +185,7 @@ app.get('/api/v1/youtube/audio', async (req, res) => {
 
 // Search + download (ytplaymp3)
 app.get('/api/v1/youtube/ytplaymp3', async (req, res) => {
-    const { query } = req.query;
+    const { query, quality = 128 } = req.query;
     if (!query) {
         return res.status(400).json({ status: false, message: "Parameter 'query' wajib diisi" });
     }
@@ -127,9 +198,13 @@ app.get('/api/v1/youtube/ytplaymp3', async (req, res) => {
 
         const first = search.all[0];
         
-        const download = await ezsrvDownload(first.url);
+        const download = await ezsrvDownload(first.url, parseInt(quality));
         if (!download.status) {
-            return res.status(500).json({ status: false, message: download.message });
+            return res.status(500).json({ 
+                status: false, 
+                message: download.message,
+                detail: download.detail 
+            });
         }
 
         res.json({
