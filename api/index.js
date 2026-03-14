@@ -2,7 +2,6 @@
 const express = require('express');
 const cors = require('cors');
 const yts = require('yt-search');
-const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,25 +17,7 @@ function getYoutubeId(url) {
     return match ? match[1] : null;
 }
 
-// ============= DECODE SAVETUBE =============
-const decodeData = (enc) => {
-    try {
-        const secret_key = 'C5D58EF67A7584E4A29F6C35BBC4EB12';
-        const data = Buffer.from(enc, 'base64');
-        const iv = data.slice(0, 16);
-        const content = data.slice(16);
-        const key = Buffer.from(secret_key, 'hex');
-
-        const decipher = crypto.createDecipheriv('aes-128-cbc', key, iv);
-        let decrypted = Buffer.concat([decipher.update(content), decipher.final()]);
-
-        return JSON.parse(decrypted.toString());
-    } catch (error) {
-        throw new Error(error.message);
-    }
-};
-
-// ============= EZSRV DOWNLOADER (UTAMA) =============
+// ============= EZSRV DOWNLOADER =============
 const CAPTCHA_TOKEN = "0.gTx3EWwdD-a4mVSKCcbCbwWeHIbNPiOLyqM_zhvxdcFf5KXomDnPPqBGtU4myAt3uD_EhD6FHpsdcRsSDTNSxjUr6B0yBrEH0hBSh13XwdFv0dMYfnqhw5DNKDWB8Hd6EkhawP9c2mg3eMTi1f6xm7kJZlHmttAbBPoo9pGXDjxwu9DNlO-TnMT2VkpDhZqNcoaQ4-qf4-WvHtcAXsZWTw2-Ndpe14Qb8aM-IfAFea-WHpMNuweEcsMf0fEwbcV9Jsd-U4DeW9_nBx223PjbLDc44DggHuV9qN1Hm4ZUCfwdD3y7lVL8wpPV5Ni0GvRPs4ay1vWkxc6KtOahv3RrjLskiHLRfvsVz_gJVijyYlj5avihCpJTiV4Glnmzxb6VW-C7QaNd4kVoPgT6xm36OSzgdKvBzSJPhLScDhAGTP2f_7cwQnnypq4T2RlQWCK_AK_TVf7fvYDBhHeZrNJpTXBIBibo3r9xiTsVIuKP-B_GBEgQb9E9IwF8s-o2NvE2jgS2t2-y039ee-4LgAQRfhnAa-083vgtbIgeOAv1xy7kIqDD_WvMnuEWXk3kagWJqSGUOpTyHLlKQJXTaRerpELIGq9xMGOr-0tyCNvm1n_OoBTyBSDWvNRjBv4W4aZZaA1kX11j_VFohEovk0guCX__F0O-Td7q9YQu6PU8Fwenw8p1ElWxJ8I_V2ob8FgFdbVq-W-DzvG4_gDA19oDrgJ6ucEdGVSj2NxvVTui3_5DhordNdLph7eCJEOKtJ9ryPvGMpbitxv988-R1fR93mXfc3cmoeTBCO7TqbBw4wa83wGWoKKR-vxmIoxWK6Mh5OmcaZTpPsFx64KSss_pVMz_ezxLMPTiMIPJkW0JRJ5oCWdTfIZazfNijj4araPM.FbzXl1j7uoQU0TLFo2YiBw.5417692ea9ebf0c75ffcf35384fa97c67efc59624644df1eaafd8a3da091d905";
 
 async function ezsrvDownload(link, quality = 128) {
@@ -67,57 +48,11 @@ async function ezsrvDownload(link, quality = 128) {
                 quality: quality + "kbps"
             };
         } else {
-            return { status: false, message: "ezsrv: Gagal mendapatkan URL" };
+            return { status: false, message: "Gagal mendapatkan URL dari ezsrv" };
         }
     } catch (error) {
         console.error("ezsrv error:", error);
-        return { status: false, message: "ezsrv: " + error.message };
-    }
-}
-
-// ============= SAVETUBE DOWNLOADER (FALLBACK) =============
-async function savetubeDownload(link) {
-    try {
-        const cdnRes = await fetch("https://media.savetube.vip/api/random-cdn", {
-            headers: {
-                'Accept': 'application/json, text/plain, */*',
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36'
-            }
-        });
-        const { cdn } = await cdnRes.json();
-
-        const infoRes = await fetch(`https://${cdn}/v2/info`, {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ url: link })
-        });
-        const infoData = await infoRes.json();
-        const info = decodeData(infoData.data);
-
-        const downRes = await fetch(`https://${cdn}/download`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                downloadType: "audio",
-                quality: "128",
-                key: info.key
-            })
-        });
-        const downData = await downRes.json();
-        const downloadUrl = downData.data.downloadUrl;
-
-        return {
-            status: true,
-            url: downloadUrl,
-            title: info.title,
-            quality: "128kbps"
-        };
-    } catch (error) {
-        console.error("savetube error:", error);
-        return { status: false, message: "savetube: " + error.message };
+        return { status: false, message: error.message };
     }
 }
 
@@ -126,7 +61,7 @@ app.get('/', (req, res) => {
     res.json({
         name: "YouTube Audio Downloader API",
         version: "v2",
-        description: "Menggunakan ezsrv.net (utama) dan fallback ke savetube.vip",
+        description: "Menggunakan ezsrv.net sebagai sumber download",
         endpoints: {
             audio: "/api/v1/youtube/audio?url={youtube_url}",
             playmp3: "/api/v1/youtube/ytplaymp3?query={keyword}"
@@ -152,15 +87,9 @@ app.get('/api/v1/youtube/audio', async (req, res) => {
         const metadata = await yts(videoUrl);
         const video = metadata.all[0] || null;
 
-        // Coba ezsrv dulu
-        let download = await ezsrvDownload(videoUrl);
+        const download = await ezsrvDownload(videoUrl);
         if (!download.status) {
-            console.log("ezsrv gagal, fallback ke savetube");
-            download = await savetubeDownload(videoUrl);
-        }
-
-        if (!download.status) {
-            return res.status(500).json({ status: false, message: "Semua sumber download gagal" });
+            return res.status(500).json({ status: false, message: download.message });
         }
 
         res.json({
@@ -198,15 +127,9 @@ app.get('/api/v1/youtube/ytplaymp3', async (req, res) => {
 
         const first = search.all[0];
         
-        // Coba ezsrv dulu
-        let download = await ezsrvDownload(first.url);
+        const download = await ezsrvDownload(first.url);
         if (!download.status) {
-            console.log("ezsrv gagal, fallback ke savetube");
-            download = await savetubeDownload(first.url);
-        }
-
-        if (!download.status) {
-            return res.status(500).json({ status: false, message: "Semua sumber download gagal" });
+            return res.status(500).json({ status: false, message: download.message });
         }
 
         res.json({
