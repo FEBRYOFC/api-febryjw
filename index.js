@@ -344,7 +344,7 @@ app.get("/api/v1/youtube/yeteplay", async(req,res)=>{
 
  }
 
-}).
+})
 
 // ================= YTMP3 =================
 
