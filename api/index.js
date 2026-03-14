@@ -9,8 +9,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ========== [ FUNGSI WAKTU INDONESIA ] ==========
-function waktuIndonesia() 
+// ========== [ ASYNC FUNGSI WAKTU INDONESIA ] ==========
+async function waktuIndonesia() 
 {
   return new Date().toLocaleString
   (
@@ -28,8 +28,8 @@ function waktuIndonesia()
   );
 }
 
-// ========== [ FUNGSI DETECTION OS ] ==========
-function detectOS(ua) 
+// ========== [ ASYNC FUNGSI DETECTION OS ] ==========
+async function detectOS(ua) 
 {
   ua = ua.toLowerCase();
   
@@ -42,8 +42,8 @@ function detectOS(ua)
   return "Unknown";
 }
 
-// ========== [ FUNGSI DETECTION BROWSER ] ==========
-function detectBrowser(ua) 
+// ========== [ ASYNC FUNGSI DETECTION BROWSER ] ==========
+async function detectBrowser(ua) 
 {
   ua = ua.toLowerCase();
   
@@ -55,8 +55,8 @@ function detectBrowser(ua)
   return "Unknown";
 }
 
-// ========== [ FUNGSI DETECTION BOT ] ==========
-function detectBot(ua) 
+// ========== [ ASYNC FUNGSI DETECTION BOT ] ==========
+async function detectBot(ua) 
 {
   ua = ua.toLowerCase();
   
@@ -74,8 +74,8 @@ function detectBot(ua)
   return bots.some((x) => ua.includes(x));
 }
 
-// ========== [ FUNGSI TIPE JARINGAN ] ==========
-function tipeJaringan(data) 
+// ========== [ ASYNC FUNGSI TIPE JARINGAN ] ==========
+async function tipeJaringan(data) 
 {
   if (data.hosting) return "Datacenter / Server";
   if (data.mobile) return "Mobile Network";
@@ -94,15 +94,15 @@ app.get
     
     try 
     {
+      const waktu = await waktuIndonesia();
       const end = Date.now();
       
       res.json
       (
         {
-          waktu_indonesia: waktuIndonesia(),
           status: true,
-          creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-          respon_data: 
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: 
           {
             message: "API Lacak IP aktif, fitur YouTube download dinonaktifkan sementara",
             endpoints: 
@@ -124,10 +124,9 @@ app.get
       res.json
       (
         {
-          waktu_indonesia: waktuIndonesia(),
           status: false,
-          creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-          respon_data: error.message,
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: error.message,
           timestamp: new Date().toISOString(),
           response_time: `${end - start}ms`
         }
@@ -166,16 +165,22 @@ app.get
       
       const maps = `https://www.google.com/maps?q=${g.lat},${g.lon}`;
 
+      // ========== [ PANGGIL ASYNC FUNCTIONS ] ==========
+      const waktu = await waktuIndonesia();
+      const os = await detectOS(ua);
+      const browser = await detectBrowser(ua);
+      const bot = await detectBot(ua);
+      const jaringan = await tipeJaringan(g);
+      
       const end = Date.now();
 
       // ========== [ RESPON DATA LACAK ] ==========
       res.json
       (
         {
-          waktu_indonesia: waktuIndonesia(),
           status: true,
-          creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-          respon_data: 
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: 
           {
             ip: g.query,
             
@@ -201,7 +206,7 @@ app.get
               organisasi: g.org,
               as: g.as,
               as_name: g.asname,
-              tipe: tipeJaringan(g),
+              tipe: jaringan,
               mobile_network: g.mobile,
               vpn_proxy: g.proxy,
               hosting: g.hosting
@@ -209,9 +214,9 @@ app.get
             
             sistem: 
             { 
-              os: detectOS(ua), 
-              browser: detectBrowser(ua), 
-              bot_request: detectBot(ua), 
+              os: os, 
+              browser: browser, 
+              bot_request: bot, 
               user_agent: ua 
             },
             
@@ -235,10 +240,9 @@ app.get
       res.json
       (
         {
-          waktu_indonesia: waktuIndonesia(),
           status: false,
-          creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-          respon_data: error.message,
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: error.message,
           timestamp: new Date().toISOString(),
           response_time: `${end - start}ms`
         }
