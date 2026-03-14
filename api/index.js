@@ -2,7 +2,6 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const cheerio = require("cheerio");
 
 // ========== [ INISIALISASI APP ] ==========
 const app = express();
@@ -24,61 +23,6 @@ function waktuIndonesia() {
   });
 }
 
-// ========== [ FUNGSI EKSTRAK INFO DARI HTML ] ==========
-function extractVideoInfo(html) {
-  const $ = cheerio.load(html);
-  
-  let title = $('h2').first().text() || 
-              $('.video-title').text() || 
-              $('title').text().replace(' - SSYouTube.online', '');
-  
-  let duration = 0;
-  const durationText = $('p:contains("Duration")').text() || 
-                       $('.duration').text() ||
-                       $('body').text().match(/Duration:?\s*(\d{2}:\d{2}:\d{2})/)?.[1] || '';
-  
-  const durationMatch = durationText.match(/(\d{2}):(\d{2}):(\d{2})/);
-  if (durationMatch) {
-    duration = parseInt(durationMatch[1]) * 3600 + 
-               parseInt(durationMatch[2]) * 60 + 
-               parseInt(durationMatch[3]);
-  }
-
-  return { title, duration };
-}
-
-// ========== [ FUNGSI EKSTRAK NONCE & COOKIE ] ==========
-async function extractNonceAndCookie() {
-  try {
-    const response = await axios.get("https://ssyoutube.online/id4/youtube-to-mp3-id1/", {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-      }
-    });
-
-    const cookies = response.headers["set-cookie"] || [];
-    const cookieString = cookies.map(c => c.split(";")[0]).join("; ");
-
-    const $ = cheerio.load(response.data);
-    
-    let nonce = null;
-    const scriptContent = $('script#new-analytics-tracker-js-extra').html();
-    if (scriptContent) {
-      const match = scriptContent.match(/nonce":"([^"]+)"/);
-      if (match) nonce = match[1];
-    }
-
-    console.log("Extracted nonce:", nonce);
-    console.log("Initial cookies:", cookieString);
-
-    return { nonce, cookieString };
-  } catch (error) {
-    console.error("Gagal mengekstrak nonce:", error.message);
-    return { nonce: null, cookieString: "" };
-  }
-}
-
 // ========== [ ENDPOINT UTAMA / ] ==========
 app.get("/", (req, res) => {
   res.json({
@@ -98,7 +42,6 @@ app.get("/", (req, res) => {
 // ========== [ ENDPOINT YTMP3 ] ==========
 app.get("/api/v1/youtube/ytmp3", async (req, res) => {
   const start = Date.now();
-  const cookieJar = { cookies: "" };
   
   try {
     const { url } = req.query;
@@ -113,6 +56,7 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
       });
     }
 
+    // Validasi URL YouTube
     const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
     if (!youtubeRegex.test(url)) {
       return res.status(400).json({
@@ -124,115 +68,79 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
       });
     }
 
-    // ========== LANGKAH 1: Dapatkan nonce dan cookie ==========
-    console.log("Step 1: Extracting nonce and cookies...");
-    const { nonce, cookieString } = await extractNonceAndCookie();
-    cookieJar.cookies = cookieString;
+    // ========== PAKAI ENDPOINT YANG SUDAH TERBUKTI BERHASIL ==========
+    // Dari data network: POST ke admin-ajax.php dengan nonce 524cb0966c
+    // yang mengembalikan {"success":true,"data":{"proxiedUrl":"https://..."}}
     
-    if (!nonce) {
-      throw new Error("Gagal mendapatkan nonce dari halaman");
-    }
-
-    // ========== LANGKAH 2: Submit URL ke yt-video-detail ==========
-    console.log("Step 2: Submitting URL to yt-video-detail...");
     const formData = new URLSearchParams();
-    formData.append("videoURL", url);
+    formData.append("action", "new_analytics_track");
+    formData.append("nonce", "524cb0966c"); // Pakai nonce yang sudah terbukti work
+    formData.append("quality", "MP3");
+    formData.append("quality_version", "0-100 MB");
 
-    const submitResponse = await axios.post(
-      "https://ssyoutube.online/yt-video-detail/",
+    console.log("Mengirim request ke admin-ajax.php...");
+    
+    const response = await axios.post(
+      "https://ssyoutube.online/wp-admin/admin-ajax.php",
       formData,
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Cookie": cookieJar.cookies,
-          "Referer": "https://ssyoutube.online/id4/youtube-to-mp3-id1/"
-        },
-        maxRedirects: 5,
-        validateStatus: (status) => status < 400
-      }
-    );
-
-    console.log("Submit response status:", submitResponse.status);
-    console.log("Submit response headers:", submitResponse.headers);
-
-    if (submitResponse.headers["set-cookie"]) {
-      const newCookies = submitResponse.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
-      cookieJar.cookies = cookieJar.cookies ? `${cookieJar.cookies}; ${newCookies}` : newCookies;
-      console.log("Updated cookies after submit:", cookieJar.cookies);
-    }
-
-    // Ekstrak info video
-    const videoInfo = extractVideoInfo(submitResponse.data);
-    console.log("Video info extracted:", videoInfo);
-
-    // ========== LANGKAH 3: Minta URL download via admin-ajax.php ==========
-    console.log("Step 3: Requesting download URL via admin-ajax...");
-    console.log("Using nonce:", nonce);
-    console.log("Cookies:", cookieJar.cookies);
-
-    const ajaxResponse = await axios.post(
-      "https://ssyoutube.online/wp-admin/admin-ajax.php",
-      new URLSearchParams({
-        action: "new_analytics_track",
-        nonce: nonce,
-        quality: "MP3",
-        quality_version: "0-100 MB"
-      }),
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Cookie": cookieJar.cookies,
           "Referer": "https://ssyoutube.online/yt-video-detail/",
           "X-Requested-With": "XMLHttpRequest"
         }
       }
     );
 
-    console.log("AJAX response status:", ajaxResponse.status);
-    console.log("AJAX response data:", ajaxResponse.data);
+    console.log("Response status:", response.status);
+    console.log("Response data:", JSON.stringify(response.data, null, 2));
 
-    if (ajaxResponse.headers["set-cookie"]) {
-      const newCookies = ajaxResponse.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
-      cookieJar.cookies = `${cookieJar.cookies}; ${newCookies}`;
-    }
-
-    // ========== LANGKAH 4: Dapatkan tunnel URL final ==========
-    console.log("Step 4: Getting tunnel URL...");
-    const tunnelResponse = await axios.post(
-      "https://ssyoutube.online/wp-admin/admin-ajax.php",
-      new URLSearchParams({
-        action: "new_analytics_track",
-        nonce: nonce
-      }),
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Cookie": cookieJar.cookies,
-          "Referer": "https://ssyoutube.online/yt-video-detail/",
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      }
-    );
-
-    console.log("Tunnel response status:", tunnelResponse.status);
-    console.log("Tunnel response data:", tunnelResponse.data);
-
-    const tunnelData = tunnelResponse.data;
+    const data = response.data;
     
-    if (!tunnelData.success || !tunnelData.data) {
-      console.error("Tunnel data error:", tunnelData);
-      throw new Error(tunnelData.data?.error || "Gagal mendapatkan URL download");
+    if (!data.success || !data.data) {
+      throw new Error(data.data?.error || "Gagal mendapatkan URL download");
     }
 
-    // ========== SUSUN RESPONS ==========
-    const downloadUrl = tunnelData.data.url || tunnelData.data.proxiedUrl;
-    const filename = tunnelData.data.filename || "audio.mp3";
-    const title = videoInfo.title || filename.replace(/\.mp3$/, "").replace(/\s*\(youtube\)\s*$/, "");
-    const duration = videoInfo.duration || tunnelData.data.duration || 0;
+    // Dari data network, respons bisa berupa:
+    // 1. {success: true, data: {proxiedUrl: "https://..."}}
+    // 2. {success: true, data: {status: "tunnel", url: "https://...", filename: "...", duration: ...}}
+    
+    let downloadUrl = data.data.proxiedUrl || data.data.url;
+    let filename = data.data.filename || "audio.mp3";
+    let title = filename.replace(/\.mp3$/, "").replace(/\s*\(youtube\)\s*$/, "");
+    let duration = data.data.duration || 0;
+
+    // Jika ada status tunnel, mungkin perlu request kedua
+    if (data.data.status === "tunnel") {
+      console.log("Mendapatkan tunnel URL...");
+      
+      const tunnelResponse = await axios.post(
+        "https://ssyoutube.online/wp-admin/admin-ajax.php",
+        new URLSearchParams({
+          action: "new_analytics_track",
+          nonce: "524cb0966c"
+        }),
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://ssyoutube.online/yt-video-detail/",
+            "X-Requested-With": "XMLHttpRequest"
+          }
+        }
+      );
+      
+      const tunnelData = tunnelResponse.data;
+      console.log("Tunnel response:", tunnelData);
+      
+      if (tunnelData.success && tunnelData.data) {
+        downloadUrl = tunnelData.data.url || tunnelData.data.proxiedUrl;
+        filename = tunnelData.data.filename || filename;
+        title = filename.replace(/\.mp3$/, "").replace(/\s*\(youtube\)\s*$/, "");
+        duration = tunnelData.data.duration || duration;
+      }
+    }
 
     const result = {
       status: true,
@@ -255,8 +163,7 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
     console.error("ERROR DETAILS:", {
       message: error.message,
       response: error.response?.data,
-      status: error.response?.status,
-      headers: error.response?.headers
+      status: error.response?.status
     });
     
     res.status(500).json({
