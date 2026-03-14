@@ -53,7 +53,7 @@ app.get("/api/v1/all-in-one-downloader", async (req, res) => {
       });
     }
 
-    // Panggil API downr.org dengan User-Agent yang berhasil
+    // Panggil API downr.org dengan User-Agent yang berhasil (tanpa timeout)
     const downrRes = await axios.post(
       "https://downr.org/.netlify/functions/nyt",
       { url },
@@ -62,7 +62,6 @@ app.get("/api/v1/all-in-one-downloader", async (req, res) => {
           "Content-Type": "application/json",
           "User-Agent": "Mozilla/5.0 (Android 10; Mobile; rv:148.0) Gecko/148.0 Firefox/148.0",
         },
-        timeout: 15000, // 15 detik timeout
       }
     );
 
@@ -79,7 +78,7 @@ app.get("/api/v1/all-in-one-downloader", async (req, res) => {
       });
     }
 
-    // Susun respons sesuai format NexRay
+    // Susun respons sesuai format
     const response = {
       status: true,
       author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
@@ -91,7 +90,7 @@ app.get("/api/v1/all-in-one-downloader", async (req, res) => {
         title: data.title || null,
         thumbnail: data.thumbnail || null,
         duration: data.duration || null,
-        medias: data.medias || [], // array format media
+        medias: data.medias || [],
       },
       timestamp: new Date().toISOString(),
       response_time: `${Date.now() - start}ms`,
