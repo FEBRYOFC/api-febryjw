@@ -12,7 +12,6 @@ app.use(express.json())
 // ================= WAKTU INDONESIA =================
 
 function waktuIndonesia(){
-
  return new Date().toLocaleString("id-ID",{
   timeZone:"Asia/Jakarta",
   weekday:"long",
@@ -23,7 +22,6 @@ function waktuIndonesia(){
   minute:"2-digit",
   second:"2-digit"
  })
-
 }
 
 function sendResponse(res,start,result,status=true){
@@ -31,17 +29,12 @@ function sendResponse(res,start,result,status=true){
  const end = Date.now()
 
  res.json({
-
   waktu_indonesia: waktuIndonesia(),
   status: status,
   creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-
   result: result,
-
   timestamp: new Date().toISOString(),
-
   response_time: `${end-start}ms`
-
  })
 
 }
@@ -59,7 +52,6 @@ function detectOS(ua){
  if(ua.includes("linux")) return "Linux"
 
  return "Unknown"
-
 }
 
 function detectBrowser(ua){
@@ -72,7 +64,6 @@ function detectBrowser(ua){
  if(ua.includes("edge")) return "Edge"
 
  return "Unknown"
-
 }
 
 function detectBot(ua){
@@ -80,17 +71,10 @@ function detectBot(ua){
  ua = ua.toLowerCase()
 
  const bots = [
-  "bot",
-  "crawler",
-  "spider",
-  "curl",
-  "wget",
-  "python",
-  "node-fetch"
+  "bot","crawler","spider","curl","wget","python","node-fetch"
  ]
 
  return bots.some(x => ua.includes(x))
-
 }
 
 function tipeJaringan(data){
@@ -100,7 +84,6 @@ function tipeJaringan(data){
  if(data.proxy) return "Kemungkinan VPN / Proxy"
 
  return "Home ISP"
-
 }
 
 // ================= CDN CACHE =================
@@ -147,28 +130,27 @@ class Savetube{
 
  async getCdn(){
 
- try{
+  try{
 
-  if(CDN_CACHE && Date.now() - CDN_TIME < 300000){
+   if(CDN_CACHE && Date.now() - CDN_TIME < 300000){
+    return CDN_CACHE
+   }
+
+   const res = await axios.get(
+    "https://media.savetube.vip/api/random-cdn",
+    {timeout:5000}
+   )
+
+   CDN_CACHE = res.data.cdn
+   CDN_TIME = Date.now()
+
    return CDN_CACHE
+
+  }catch{
+
+   return "cdn403.savetube.vip"
   }
-
-  const res = await axios.get(
-   "https://media.savetube.vip/api/random-cdn"
-  )
-
-  CDN_CACHE = res.data.cdn
-  CDN_TIME = Date.now()
-
-  return CDN_CACHE
-
- }catch{
-
-  return "cdn403.savetube.vip"
-
  }
-
-}
 
  async download(url,format="mp3"){
 
@@ -179,13 +161,21 @@ class Savetube{
 
   const cdn = await this.getCdn()
 
+  // ===== ambil info =====
+
   const info = await axios.post(
    `https://${cdn}/v2/info`,
    {url:`https://www.youtube.com/watch?v=${id}`},
-   {headers:this.headers}
+   {headers:this.headers,timeout:10000}
   )
 
+  if(!info.data || !info.data.data){
+   throw new Error("Gagal mengambil data video")
+  }
+
   const dec = await this.decrypt(info.data.data)
+
+  // ===== download =====
 
   const dl = await axios.post(
    `https://${cdn}/download`,
@@ -195,17 +185,19 @@ class Savetube{
     quality: format === "mp3" ? "128" : format,
     key: dec.key
    },
-   {headers:this.headers}
+   {headers:this.headers,timeout:10000}
   )
 
-  return{
+  if(!dl.data || !dl.data.data){
+   throw new Error("Gagal mengambil link download")
+  }
 
+  return{
    title:dec.title,
    format:format,
    thumbnail:dec.thumbnail || `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
    duration:dec.duration,
    url:dl.data.data.downloadUrl
-
   }
 
  }
@@ -219,9 +211,7 @@ const savetube = new Savetube()
 app.get("/",(req,res)=>{
 
  res.json({
-
   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-
   endpoints:{
    play:"/api/v1/youtube/yeteplay?query=lagu",
    mp3:"/api/v1/youtube/ytmp3?url=youtube_url",
@@ -229,7 +219,6 @@ app.get("/",(req,res)=>{
    lacak_self:"/api/v1/lacak",
    lacak_ip:"/api/v1/lacak?ip=8.8.8.8"
   }
-
  })
 
 })
@@ -253,7 +242,8 @@ app.get("/api/v1/lacak", async(req,res)=>{
   const ua = req.headers["user-agent"] || "unknown"
 
   const api = await axios.get(
-   `http://ip-api.com/json/${ip}?fields=status,message,continent,continentCode,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,offset,currency,isp,org,as,asname,reverse,mobile,proxy,hosting,query`
+   `http://ip-api.com/json/${ip}`,
+   {timeout:5000}
   )
 
   const g = api.data
@@ -261,46 +251,27 @@ app.get("/api/v1/lacak", async(req,res)=>{
   const maps = `https://www.google.com/maps?q=${g.lat},${g.lon}`
 
   sendResponse(res,start,{
-
    ip:g.query,
-
    lokasi:{
-    benua:g.continent,
     negara:g.country,
     provinsi:g.regionName,
-    kota:g.city,
-    kode_pos:g.zip
+    kota:g.city
    },
-
    koordinat:{
     latitude:g.lat,
     longitude:g.lon,
     google_maps:maps
    },
-
    jaringan:{
     isp:g.isp,
     organisasi:g.org,
-    as:g.as,
-    as_name:g.asname,
-    tipe:tipeJaringan(g),
-    mobile_network:g.mobile,
-    vpn_proxy:g.proxy,
-    hosting:g.hosting
+    tipe:tipeJaringan(g)
    },
-
    sistem:{
     os:detectOS(ua),
     browser:detectBrowser(ua),
-    bot_request:detectBot(ua),
-    user_agent:ua
-   },
-
-   waktu:{
-    timezone:g.timezone,
-    offset:g.offset
+    bot_request:detectBot(ua)
    }
-
   },true)
 
  }catch(e){
@@ -395,5 +366,7 @@ app.get("/api/v1/youtube/ytmp4", async(req,res)=>{
  }
 
 })
+
+// ===== SERVERLESS EXPORT =====
 
 module.exports = app
