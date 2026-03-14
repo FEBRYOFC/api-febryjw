@@ -27,11 +27,14 @@ app.get("/", (req, res) => {
   res.json({
     status: true,
     author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-    message: "Multi-platform Downloader (TikTok & YouTube)",
-    endpoint: {
-      download: "/api/v1/all-in-one-downloader?url=... (supports TikTok & YouTube links)",
+    result: {
+      message: "Multi-platform Downloader (TikTok & YouTube)",
+      endpoint: {
+        download: "/api/v1/all-in-one-downloader?url=... (supports TikTok & YouTube links)",
+      },
     },
     timestamp: new Date().toISOString(),
+    response_time: "0ms",
   });
 });
 
@@ -44,18 +47,21 @@ app.get("/api/v1/all-in-one-downloader", async (req, res) => {
       return res.status(400).json({
         status: false,
         author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-        error: "Parameter 'url' diperlukan",
+        result: "Parameter 'url' diperlukan",
         timestamp: new Date().toISOString(),
         response_time: `${Date.now() - start}ms`,
       });
     }
 
-    // Panggil API downr.org
+    // Panggil API downr.org dengan User-Agent yang berhasil
     const downrRes = await axios.post(
       "https://downr.org/.netlify/functions/nyt",
       { url },
       {
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Mozilla/5.0 (Android 10; Mobile; rv:148.0) Gecko/148.0 Firefox/148.0",
+        },
         timeout: 15000, // 15 detik timeout
       }
     );
@@ -67,13 +73,13 @@ app.get("/api/v1/all-in-one-downloader", async (req, res) => {
       return res.status(400).json({
         status: false,
         author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-        error: data.error,
+        result: data.error,
         timestamp: new Date().toISOString(),
         response_time: `${Date.now() - start}ms`,
       });
     }
 
-    // Susun respons yang rapi
+    // Susun respons sesuai format NexRay
     const response = {
       status: true,
       author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
@@ -94,10 +100,12 @@ app.get("/api/v1/all-in-one-downloader", async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error("Download error:", error.message);
+    // Tampilkan detail error jika ada dari response
+    const errorDetail = error.response ? error.response.data : error.message;
     res.status(500).json({
       status: false,
       author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-      error: error.message,
+      result: errorDetail,
       timestamp: new Date().toISOString(),
       response_time: `${Date.now() - start}ms`,
     });
