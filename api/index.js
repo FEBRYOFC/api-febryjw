@@ -2,6 +2,8 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const crypto = require("crypto");
+const yts = require("yt-search");
 
 // ========== [ INISIALISASI APP ] ==========
 const app = express();
@@ -9,7 +11,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ========== [ ASYNC FUNGSI WAKTU INDONESIA ] ==========
+// ========== [ FUNGSI WAKTU INDONESIA ] ==========
 async function waktuIndonesia() 
 {
   return new Date().toLocaleString
@@ -28,7 +30,119 @@ async function waktuIndonesia()
   );
 }
 
-// ========== [ ASYNC FUNGSI DETECTION OS ] ==========
+// ========== [ CLASS SAVETUBE (DARI SCRAPE ANDA) ] ==========
+class Savetube 
+{
+  constructor() 
+  {
+    this.ky = 'C5D58EF67A7584E4A29F6C35BBC4EB12';
+    this.hr = 
+    {
+      'content-type': 'application/json',
+      'origin': 'https://yt.savetube.vip',
+      'user-agent': 'Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0'
+    };
+    this.fmt = ['144', '240', '360', '480', '720', '1080', 'mp3'];
+    this.m = /^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:shorts\/)?([a-zA-Z0-9_-]{11})/;
+  }
+
+  async decrypt(enc) 
+  {
+    try 
+    {
+      const [sr, ky] = [Buffer.from(enc, 'base64'), Buffer.from(this.ky, 'hex')];
+      const [iv, dt] = [sr.slice(0, 16), sr.slice(16)];
+      const dc = crypto.createDecipheriv('aes-128-cbc', ky, iv);
+      
+      return JSON.parse
+      (
+        Buffer.concat
+        (
+          [
+            dc.update(dt), 
+            dc.final()
+          ]
+        ).toString()
+      );
+    } 
+    
+    catch (e) 
+    {
+      throw new Error(`Error while decrypting data: ${e.message}`);
+    }
+  }
+
+  async getCdn() 
+  {
+    const response = await axios.get
+    (
+      "https://media.savetube.vip/api/random-cdn", 
+      { headers: this.hr }
+    );
+    
+    if (!response.status) return response;
+    
+    return {
+      status: true,
+      data: response.data.cdn
+    };
+  }
+
+  async download(url, format = '1080') 
+  {
+    const id = url.match(this.m)?.[3];
+    
+    if (!id) 
+    {
+      throw new Error("ID cannot be extracted from URL");
+    }
+    
+    if (!format || !this.fmt.includes(format)) 
+    {
+      throw new Error(`Format not found. Available formats: ${this.fmt.join(', ')}`);
+    }
+    
+    const u = await this.getCdn();
+    
+    if (!u.status) throw new Error("Failed to fetch CDN");
+    
+    const res = await axios.post
+    (
+      `https://${u.data}/v2/info`, 
+      {
+        url: `https://www.youtube.com/watch?v=${id}`
+      }, 
+      { headers: this.hr }
+    );
+    
+    const dec = await this.decrypt(res.data.data);
+    
+    const dl = await axios.post
+    (
+      `https://${u.data}/download`, 
+      {
+        id: id,
+        downloadType: format === 'mp3' ? 'audio' : 'video',
+        quality: format === 'mp3' ? '128' : format,
+        key: dec.key
+      }, 
+      { headers: this.hr }
+    );
+
+    return {
+      title: dec.title,
+      format: format,
+      thumbnail: dec.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+      duration: dec.duration,
+      url: dl.data.data.downloadUrl
+    };
+  }
+}
+
+// ========== [ INSTANCE SAVETUBE ] ==========
+const savetube = new Savetube();
+
+// ========== [ FUNGSI DETECTION (UNTUK LACAK IP) ] ==========
 async function detectOS(ua) 
 {
   ua = ua.toLowerCase();
@@ -42,7 +156,6 @@ async function detectOS(ua)
   return "Unknown";
 }
 
-// ========== [ ASYNC FUNGSI DETECTION BROWSER ] ==========
 async function detectBrowser(ua) 
 {
   ua = ua.toLowerCase();
@@ -55,7 +168,6 @@ async function detectBrowser(ua)
   return "Unknown";
 }
 
-// ========== [ ASYNC FUNGSI DETECTION BOT ] ==========
 async function detectBot(ua) 
 {
   ua = ua.toLowerCase();
@@ -74,7 +186,6 @@ async function detectBot(ua)
   return bots.some((x) => ua.includes(x));
 }
 
-// ========== [ ASYNC FUNGSI TIPE JARINGAN ] ==========
 async function tipeJaringan(data) 
 {
   if (data.hosting) return "Datacenter / Server";
@@ -104,9 +215,12 @@ app.get
           author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
           result: 
           {
-            message: "API Lacak IP aktif, fitur YouTube download dinonaktifkan sementara",
+            message: "YouTube Downloader API by FebryJW",
             endpoints: 
             {
+              play: "/api/v1/youtube/ytplay?query=lagu",
+              mp3: "/api/v1/youtube/ytmp3?url=youtube_url",
+              mp4: "/api/v1/youtube/ytmp4?url=youtube_url&resolusi=720",
               lacak_self: "/api/v1/lacak",
               lacak_ip: "/api/v1/lacak?ip=8.8.8.8"
             }
@@ -154,7 +268,6 @@ app.get
       
       const ua = req.headers["user-agent"] || "unknown";
 
-      // ========== [ REQUEST KE IP-API ] ==========
       const api = await axios.get
       (
         `http://ip-api.com/json/${ip}?fields=status,message,continent,continentCode,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,offset,currency,isp,org,as,asname,reverse,mobile,proxy,hosting,query`,
@@ -165,7 +278,6 @@ app.get
       
       const maps = `https://www.google.com/maps?q=${g.lat},${g.lon}`;
 
-      // ========== [ PANGGIL ASYNC FUNCTIONS ] ==========
       const waktu = await waktuIndonesia();
       const os = await detectOS(ua);
       const browser = await detectBrowser(ua);
@@ -174,7 +286,6 @@ app.get
       
       const end = Date.now();
 
-      // ========== [ RESPON DATA LACAK ] ==========
       res.json
       (
         {
@@ -236,7 +347,185 @@ app.get
     {
       const end = Date.now();
       
-      // ========== [ HANDLING ERROR LACAK ] ==========
+      res.json
+      (
+        {
+          status: false,
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: error.message,
+          timestamp: new Date().toISOString(),
+          response_time: `${end - start}ms`
+        }
+      );
+    }
+  }
+);
+
+// ========== [ ENDPOINT YTPLAY (SEARCH + MP3) ] ==========
+app.get
+(
+  "/api/v1/youtube/ytplay", 
+  async (req, res) => 
+  {
+    const start = Date.now();
+    
+    try 
+    {
+      const { query } = req.query;
+      
+      if (!query) throw new Error("Parameter 'query' diperlukan");
+
+      const search = await yts(query);
+      const video = search.videos[0];
+      
+      if (!video) throw new Error("Video tidak ditemukan");
+
+      const download = await savetube.download(video.url, "mp3");
+
+      const end = Date.now();
+
+      res.json
+      (
+        {
+          status: true,
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: 
+          {
+            title: video.title,
+            videoId: video.videoId,
+            duration: video.duration,
+            thumbnail: video.thumbnail,
+            
+            download: 
+            {
+              title: download.title,
+              format: download.format,
+              duration: download.duration,
+              url: download.url
+            }
+          },
+          timestamp: new Date().toISOString(),
+          response_time: `${end - start}ms`
+        }
+      );
+    }
+    
+    catch (error) 
+    {
+      const end = Date.now();
+      
+      res.json
+      (
+        {
+          status: false,
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: error.message,
+          timestamp: new Date().toISOString(),
+          response_time: `${end - start}ms`
+        }
+      );
+    }
+  }
+);
+
+// ========== [ ENDPOINT YTMP3 (AUDIO) ] ==========
+app.get
+(
+  "/api/v1/youtube/ytmp3", 
+  async (req, res) => 
+  {
+    const start = Date.now();
+    
+    try 
+    {
+      const { url } = req.query;
+      
+      if (!url) throw new Error("Parameter 'url' diperlukan");
+
+      const download = await savetube.download(url, "mp3");
+
+      const end = Date.now();
+
+      res.json
+      (
+        {
+          status: true,
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: 
+          {
+            title: download.title,
+            format: download.format,
+            thumbnail: download.thumbnail,
+            duration: download.duration,
+            url: download.url
+          },
+          timestamp: new Date().toISOString(),
+          response_time: `${end - start}ms`
+        }
+      );
+    }
+    
+    catch (error) 
+    {
+      const end = Date.now();
+      
+      res.json
+      (
+        {
+          status: false,
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: error.message,
+          timestamp: new Date().toISOString(),
+          response_time: `${end - start}ms`
+        }
+      );
+    }
+  }
+);
+
+// ========== [ ENDPOINT YTMP4 (VIDEO) ] ==========
+app.get
+(
+  "/api/v1/youtube/ytmp4", 
+  async (req, res) => 
+  {
+    const start = Date.now();
+    
+    try 
+    {
+      const { url, resolusi } = req.query;
+      
+      if (!url) throw new Error("Parameter 'url' diperlukan");
+
+      const quality = resolusi || "720";
+      
+      const download = await savetube.download(url, quality);
+
+      const end = Date.now();
+
+      res.json
+      (
+        {
+          status: true,
+          author: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+          result: 
+          {
+            title: download.title,
+            format: download.format,
+            thumbnail: download.thumbnail,
+            duration: download.duration,
+            url: download.url
+          },
+          timestamp: new Date().toISOString(),
+          response_time: `${end - start}ms`
+        }
+      );
+    }
+    
+    catch (error) 
+    {
+      const end = Date.now();
+      
       res.json
       (
         {
