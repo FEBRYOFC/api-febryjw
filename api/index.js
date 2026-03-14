@@ -26,12 +26,69 @@ function waktuIndonesia(){
 
 }
 
+// ================= DETECTION =================
+
+function detectOS(ua){
+
+ ua = ua.toLowerCase()
+
+ if(ua.includes("android")) return "Android"
+ if(ua.includes("iphone")) return "iOS"
+ if(ua.includes("windows")) return "Windows"
+ if(ua.includes("mac")) return "MacOS"
+ if(ua.includes("linux")) return "Linux"
+
+ return "Unknown"
+
+}
+
+function detectBrowser(ua){
+
+ ua = ua.toLowerCase()
+
+ if(ua.includes("chrome")) return "Chrome"
+ if(ua.includes("firefox")) return "Firefox"
+ if(ua.includes("safari") && !ua.includes("chrome")) return "Safari"
+ if(ua.includes("edge")) return "Edge"
+
+ return "Unknown"
+
+}
+
+function detectBot(ua){
+
+ ua = ua.toLowerCase()
+
+ const bots = [
+  "bot",
+  "crawler",
+  "spider",
+  "curl",
+  "wget",
+  "python",
+  "node-fetch"
+ ]
+
+ return bots.some(x => ua.includes(x))
+
+}
+
+function tipeJaringan(data){
+
+ if(data.hosting) return "Datacenter / Server"
+ if(data.mobile) return "Mobile Network"
+ if(data.proxy) return "Kemungkinan VPN / Proxy"
+
+ return "Home ISP"
+
+}
+
 // ================= CDN CACHE =================
 
 let CDN_CACHE = null
 let CDN_TIME = 0
 
-// ================= SAVETUBE CLASS =================
+// ================= SAVETUBE =================
 
 class Savetube{
 
@@ -44,8 +101,6 @@ class Savetube{
    "origin":"https://yt.savetube.vip",
    "user-agent":"Mozilla/5.0"
   }
-
-  this.formats = ["144","240","360","480","720","1080","mp3"]
 
   this.regex = /^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:shorts\/)?([a-zA-Z0-9_-]{11})/
 
@@ -77,8 +132,7 @@ class Savetube{
   }
 
   const res = await axios.get(
-   "https://media.savetube.vip/api/random-cdn",
-   {headers:this.headers, timeout:4000}
+   "https://media.savetube.vip/api/random-cdn"
   )
 
   CDN_CACHE = res.data.cdn
@@ -99,7 +153,7 @@ class Savetube{
   const info = await axios.post(
    `https://${cdn}/v2/info`,
    {url:`https://www.youtube.com/watch?v=${id}`},
-   {headers:this.headers, timeout:6000}
+   {headers:this.headers}
   )
 
   const dec = await this.decrypt(info.data.data)
@@ -112,15 +166,17 @@ class Savetube{
     quality: format === "mp3" ? "128" : format,
     key: dec.key
    },
-   {headers:this.headers, timeout:6000}
+   {headers:this.headers}
   )
 
   return{
+
    title:dec.title,
    format:format,
    thumbnail:dec.thumbnail || `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
    duration:dec.duration,
    url:dl.data.data.downloadUrl
+
   }
 
  }
@@ -141,20 +197,24 @@ app.get("/",(req,res)=>{
    play:"/api/v1/youtube/yeteplay?query=lagu",
    mp3:"/api/v1/youtube/ytmp3?url=youtube_url",
    mp4:"/api/v1/youtube/ytmp4?url=youtube_url&resolusi=720",
-   lacak:"/api/v1/lacak"
+   lacak_self:"/api/v1/lacak",
+   lacak_ip:"/api/v1/lacak?ip=8.8.8.8"
   }
 
  })
 
 })
 
-// ================= IP TRACKER =================
+// ================= LACAK IP =================
 
 app.get("/api/v1/lacak", async(req,res)=>{
 
  try{
 
+  const ipQuery = req.query.ip
+
   const ip =
+   ipQuery ||
    req.headers["x-forwarded-for"]?.split(",")[0] ||
    req.socket.remoteAddress ||
    ""
@@ -167,52 +227,54 @@ app.get("/api/v1/lacak", async(req,res)=>{
 
   const g = api.data
 
+  const maps = `https://www.google.com/maps?q=${g.lat},${g.lon}`
+
   res.json({
 
    waktu_indonesia:waktuIndonesia(),
-
    status:true,
-
    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
 
    respon_data:{
 
     ip:g.query,
 
-    benua:g.continent,
-    kode_benua:g.continentCode,
+    lokasi:{
+     benua:g.continent,
+     negara:g.country,
+     provinsi:g.regionName,
+     kota:g.city,
+     kode_pos:g.zip
+    },
 
-    negara:g.country,
-    kode_negara:g.countryCode,
+    koordinat:{
+     latitude:g.lat,
+     longitude:g.lon,
+     google_maps:maps
+    },
 
-    provinsi:g.regionName,
-    kode_provinsi:g.region,
+    jaringan:{
+     isp:g.isp,
+     organisasi:g.org,
+     as:g.as,
+     as_name:g.asname,
+     tipe:tipeJaringan(g),
+     mobile_network:g.mobile,
+     vpn_proxy:g.proxy,
+     hosting:g.hosting
+    },
 
-    kota:g.city,
-    distrik:g.district,
-    kode_pos:g.zip,
+    sistem:{
+     os:detectOS(ua),
+     browser:detectBrowser(ua),
+     bot_request:detectBot(ua),
+     user_agent:ua
+    },
 
-    latitude:g.lat,
-    longitude:g.lon,
-
-    timezone:g.timezone,
-    offset:g.offset,
-
-    mata_uang:g.currency,
-
-    isp:g.isp,
-    organisasi:g.org,
-
-    as_number:g.as,
-    as_name:g.asname,
-
-    reverse_dns:g.reverse,
-
-    mobile_network:g.mobile,
-    vpn_proxy:g.proxy,
-    hosting:g.hosting,
-
-    user_agent:ua
+    waktu:{
+     timezone:g.timezone,
+     offset:g.offset
+    }
 
    }
 
@@ -233,7 +295,7 @@ app.get("/api/v1/lacak", async(req,res)=>{
 
 })
 
-// ================= YETEPLAY =================
+// ================= YOUTUBE PLAY =================
 
 app.get("/api/v1/youtube/yeteplay", async(req,res)=>{
 
@@ -241,25 +303,11 @@ app.get("/api/v1/youtube/yeteplay", async(req,res)=>{
 
   const {query} = req.query
 
-  if(!query)
-   return res.json({
-    waktu_indonesia:waktuIndonesia(),
-    status:false,
-    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-    respon_data:"query diperlukan"
-   })
+  if(!query) throw new Error("query diperlukan")
 
   const search = await yts(query)
 
-  if(!search.all.length)
-   return res.json({
-    waktu_indonesia:waktuIndonesia(),
-    status:false,
-    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-    respon_data:"video tidak ditemukan"
-   })
-
-  const video = search.all[0]
+  const video = search.videos[0]
 
   const data = await savetube.download(video.url,"mp3")
 
@@ -271,7 +319,6 @@ app.get("/api/v1/youtube/yeteplay", async(req,res)=>{
 
    respon_data:{
     title:video.title,
-    format:"mp3",
     duration:video.seconds,
     thumbnail:video.thumbnail,
     url:data.url
@@ -300,13 +347,7 @@ app.get("/api/v1/youtube/ytmp3", async(req,res)=>{
 
   const {url} = req.query
 
-  if(!url)
-   return res.json({
-    waktu_indonesia:waktuIndonesia(),
-    status:false,
-    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-    respon_data:"url diperlukan"
-   })
+  if(!url) throw new Error("url diperlukan")
 
   const data = await savetube.download(url,"mp3")
 
@@ -316,13 +357,7 @@ app.get("/api/v1/youtube/ytmp3", async(req,res)=>{
    status:true,
    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
 
-   respon_data:{
-    title:data.title,
-    format:"mp3",
-    duration:data.duration,
-    thumbnail:data.thumbnail,
-    url:data.url
-   }
+   respon_data:data
 
   })
 
@@ -347,13 +382,7 @@ app.get("/api/v1/youtube/ytmp4", async(req,res)=>{
 
   const {url,resolusi} = req.query
 
-  if(!url)
-   return res.json({
-    waktu_indonesia:waktuIndonesia(),
-    status:false,
-    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-    respon_data:"url diperlukan"
-   })
+  if(!url) throw new Error("url diperlukan")
 
   const quality = resolusi || "720"
 
@@ -365,13 +394,7 @@ app.get("/api/v1/youtube/ytmp4", async(req,res)=>{
    status:true,
    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
 
-   respon_data:{
-    title:data.title,
-    format:data.format,
-    duration:data.duration,
-    thumbnail:data.thumbnail,
-    url:data.url
-   }
+   respon_data:data
 
   })
 
