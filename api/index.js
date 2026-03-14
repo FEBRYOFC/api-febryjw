@@ -52,80 +52,91 @@ function tipeJaringan(data) {
   return "Home ISP";
 }
 
-// ================= CDN CACHE =================
+// ================= CDN CACHE (global untuk class) =================
 let CDN_CACHE = null;
 let CDN_TIME = 0;
 
-// ================= SAVETUBE (FIXED) =================
+// ================= SAVETUBE (TANPA FALLBACK) =================
 class Savetube {
   constructor() {
-    this.key = "C5D58EF67A7584E4A29F6C35BBC4EB12";
-    this.headers = {
+    this.ky = "C5D58EF67A7584E4A29F6C35BBC4EB12";
+    this.hr = {
       "content-type": "application/json",
       origin: "https://yt.savetube.vip",
       "user-agent": "Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0",
     };
-    this.supportedFormats = ["144", "240", "360", "480", "720", "1080", "mp3"];
-    this.regex = /^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:shorts\/)?([a-zA-Z0-9_-]{11})/;
+    this.fmt = ["144", "240", "360", "480", "720", "1080", "mp3"];
+    this.m = /^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:shorts\/)?([a-zA-Z0-9_-]{11})/;
   }
 
   async decrypt(enc) {
     try {
-      const sr = Buffer.from(enc, "base64");
-      const key = Buffer.from(this.key, "hex");
-      const iv = sr.slice(0, 16);
-      const data = sr.slice(16);
-      const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv);
-      const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
-      return JSON.parse(decrypted.toString());
+      const [sr, ky] = [Buffer.from(enc, "base64"), Buffer.from(this.ky, "hex")];
+      const [iv, dt] = [sr.slice(0, 16), sr.slice(16)];
+      const dc = crypto.createDecipheriv("aes-128-cbc", ky, iv);
+      return JSON.parse(Buffer.concat([dc.update(dt), dc.final()]).toString());
     } catch (e) {
-      throw new Error(`Gagal mendekripsi data: ${e.message}`);
+      throw new Error(`Error while decrypting data: ${e.message}`);
     }
   }
 
   async getCdn() {
+    // Gunakan cache global
     if (CDN_CACHE && Date.now() - CDN_TIME < 300000) {
       return { status: true, data: CDN_CACHE };
     }
-    try {
-      const res = await axios.get("https://media.savetube.vip/api/random-cdn", {
-        headers: this.headers,
-        timeout: 8000,
-      });
-      CDN_CACHE = res.data.cdn;
-      CDN_TIME = Date.now();
-      return { status: true, data: CDN_CACHE };
-    } catch (err) {
-      console.error("Gagal fetch CDN:", err.message);
-      // fallback ke CDN umum
-      return { status: false, data: "cdn403.savetube.vip" };
+    
+    // Request CDN baru
+    const response = await axios.get("https://media.savetube.vip/api/random-cdn", { 
+      headers: this.hr,
+      timeout: 8000 
+    });
+    
+    // Validasi response
+    if (response.status !== 200 || !response.data?.cdn) {
+      return { status: false, message: "Gagal mendapatkan CDN dari server" };
     }
+    
+    // Simpan ke cache
+    CDN_CACHE = response.data.cdn;
+    CDN_TIME = Date.now();
+    
+    return {
+      status: true,
+      data: CDN_CACHE
+    };
   }
 
   async download(url, format = "mp3") {
-    // Validasi ID
-    const id = url.match(this.regex)?.[3];
-    if (!id) throw new Error("Gagal mengekstrak ID YouTube");
-
-    // Validasi format
-    if (!this.supportedFormats.includes(format)) {
-      throw new Error(`Format tidak didukung. Pilih: ${this.supportedFormats.join(", ")}`);
+    const id = url.match(this.m)?.[3];
+    if (!id) {
+      throw new Error("ID cannot be extracted from URL");
+    }
+    if (!format || !this.fmt.includes(format)) {
+      throw new Error(`Format not found. Available formats: ${this.fmt.join(", ")}`);
     }
 
-    // Dapatkan CDN
-    const cdnResult = await this.getCdn();
-    const cdn = cdnResult.data; // string CDN
+    // Dapatkan CDN - jika gagal, throw error langsung
+    const u = await this.getCdn();
+    if (!u.status) {
+      throw new Error(u.message || "Failed to fetch CDN");
+    }
+    
+    const cdn = u.data;
     console.log(`Menggunakan CDN: ${cdn}`);
 
     // Request info video
-    const info = await axios.post(
+    const res = await axios.post(
       `https://${cdn}/v2/info`,
       { url: `https://www.youtube.com/watch?v=${id}` },
-      { headers: this.headers, timeout: 10000 }
+      { headers: this.hr, timeout: 10000 }
     );
-    if (!info.data?.data) throw new Error("Respons info tidak valid");
+    
+    if (!res.data?.data) {
+      throw new Error("Invalid response from info endpoint");
+    }
 
-    const dec = await this.decrypt(info.data.data);
+    const dec = await this.decrypt(res.data.data);
 
     // Request download URL
     const dl = await axios.post(
@@ -136,14 +147,17 @@ class Savetube {
         quality: format === "mp3" ? "128" : format,
         key: dec.key,
       },
-      { headers: this.headers, timeout: 15000 }
+      { headers: this.hr, timeout: 15000 }
     );
-    if (!dl.data?.data?.downloadUrl) throw new Error("URL download tidak ditemukan");
+    
+    if (!dl.data?.data?.downloadUrl) {
+      throw new Error("Download URL not found");
+    }
 
     return {
       title: dec.title,
       format: format,
-      thumbnail: dec.thumbnail || `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
+      thumbnail: dec.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
       duration: dec.duration,
       url: dl.data.data.downloadUrl,
     };
