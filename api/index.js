@@ -28,12 +28,10 @@ function waktuIndonesia() {
 function extractVideoInfo(html) {
   const $ = cheerio.load(html);
   
-  // Ekstrak judul video - dari screenshot terlihat judul di h2
   let title = $('h2').first().text() || 
               $('.video-title').text() || 
               $('title').text().replace(' - SSYouTube.online', '');
   
-  // Ekstrak durasi - dari screenshot "Duration: 00:01:14"
   let duration = 0;
   const durationText = $('p:contains("Duration")').text() || 
                        $('.duration').text() ||
@@ -52,7 +50,6 @@ function extractVideoInfo(html) {
 // ========== [ FUNGSI EKSTRAK NONCE & COOKIE ] ==========
 async function extractNonceAndCookie() {
   try {
-    // Ambil dari halaman form (id4/youtube-to-mp3-id1)
     const response = await axios.get("https://ssyoutube.online/id4/youtube-to-mp3-id1/", {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -65,13 +62,15 @@ async function extractNonceAndCookie() {
 
     const $ = cheerio.load(response.data);
     
-    // Cari nonce dari script new-analytics-tracker-js-extra
     let nonce = null;
     const scriptContent = $('script#new-analytics-tracker-js-extra').html();
     if (scriptContent) {
       const match = scriptContent.match(/nonce":"([^"]+)"/);
       if (match) nonce = match[1];
     }
+
+    console.log("Extracted nonce:", nonce);
+    console.log("Initial cookies:", cookieString);
 
     return { nonce, cookieString };
   } catch (error) {
@@ -114,7 +113,6 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
       });
     }
 
-    // Validasi URL YouTube
     const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
     if (!youtubeRegex.test(url)) {
       return res.status(400).json({
@@ -126,7 +124,8 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
       });
     }
 
-    // ========== LANGKAH 1: Dapatkan nonce dan cookie dari halaman FORM ==========
+    // ========== LANGKAH 1: Dapatkan nonce dan cookie ==========
+    console.log("Step 1: Extracting nonce and cookies...");
     const { nonce, cookieString } = await extractNonceAndCookie();
     cookieJar.cookies = cookieString;
     
@@ -134,11 +133,11 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
       throw new Error("Gagal mendapatkan nonce dari halaman");
     }
 
-    // ========== LANGKAH 2: Submit URL ke yt-video-detail (seperti mengisi form) ==========
+    // ========== LANGKAH 2: Submit URL ke yt-video-detail ==========
+    console.log("Step 2: Submitting URL to yt-video-detail...");
     const formData = new URLSearchParams();
     formData.append("videoURL", url);
 
-    console.log("Submitting URL to yt-video-detail...");
     const submitResponse = await axios.post(
       "https://ssyoutube.online/yt-video-detail/",
       formData,
@@ -155,19 +154,24 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
       }
     );
 
-    // Update cookie dari response submit
+    console.log("Submit response status:", submitResponse.status);
+    console.log("Submit response headers:", submitResponse.headers);
+
     if (submitResponse.headers["set-cookie"]) {
       const newCookies = submitResponse.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
       cookieJar.cookies = cookieJar.cookies ? `${cookieJar.cookies}; ${newCookies}` : newCookies;
+      console.log("Updated cookies after submit:", cookieJar.cookies);
     }
 
-    // ========== LANGKAH 3: Sekarang kita di halaman yt-video-detail ==========
-    // Ekstrak judul dan durasi dari halaman hasil
+    // Ekstrak info video
     const videoInfo = extractVideoInfo(submitResponse.data);
-    console.log("Video Info:", videoInfo);
+    console.log("Video info extracted:", videoInfo);
 
-    // ========== LANGKAH 4: Minta URL download via admin-ajax.php ==========
-    console.log("Requesting download URL...");
+    // ========== LANGKAH 3: Minta URL download via admin-ajax.php ==========
+    console.log("Step 3: Requesting download URL via admin-ajax...");
+    console.log("Using nonce:", nonce);
+    console.log("Cookies:", cookieJar.cookies);
+
     const ajaxResponse = await axios.post(
       "https://ssyoutube.online/wp-admin/admin-ajax.php",
       new URLSearchParams({
@@ -187,14 +191,16 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
       }
     );
 
-    // Update cookie
+    console.log("AJAX response status:", ajaxResponse.status);
+    console.log("AJAX response data:", ajaxResponse.data);
+
     if (ajaxResponse.headers["set-cookie"]) {
       const newCookies = ajaxResponse.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
       cookieJar.cookies = `${cookieJar.cookies}; ${newCookies}`;
     }
 
-    // ========== LANGKAH 5: Dapatkan tunnel URL final ==========
-    console.log("Getting tunnel URL...");
+    // ========== LANGKAH 4: Dapatkan tunnel URL final ==========
+    console.log("Step 4: Getting tunnel URL...");
     const tunnelResponse = await axios.post(
       "https://ssyoutube.online/wp-admin/admin-ajax.php",
       new URLSearchParams({
@@ -212,10 +218,13 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
       }
     );
 
+    console.log("Tunnel response status:", tunnelResponse.status);
+    console.log("Tunnel response data:", tunnelResponse.data);
+
     const tunnelData = tunnelResponse.data;
-    console.log("Tunnel response:", tunnelData);
     
     if (!tunnelData.success || !tunnelData.data) {
+      console.error("Tunnel data error:", tunnelData);
       throw new Error(tunnelData.data?.error || "Gagal mendapatkan URL download");
     }
 
@@ -243,7 +252,12 @@ app.get("/api/v1/youtube/ytmp3", async (req, res) => {
     res.json(result);
 
   } catch (error) {
-    console.error("ytmp3 error:", error.response?.data || error.message);
+    console.error("ERROR DETAILS:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      headers: error.response?.headers
+    });
     
     res.status(500).json({
       status: false,
