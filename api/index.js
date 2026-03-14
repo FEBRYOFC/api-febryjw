@@ -1,257 +1,235 @@
-// api/index.js
-
-const express = require('express')
-const cors = require('cors')
-const yts = require('yt-search')
+const express = require("express")
+const cors = require("cors")
+const axios = require("axios")
+const crypto = require("crypto")
+const yts = require("yt-search")
 
 const app = express()
-const PORT = process.env.PORT || 3000
 
 app.use(cors())
 app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
 
-// ================= YOUTUBE ID =================
+// ================= WAKTU INDONESIA =================
 
-function getYoutubeId(url) {
-    const regex = /(?:youtu\.be\/|v=|\/v\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/
-    const match = url.match(regex)
-    return match ? match[1] : null
-}
+function waktuIndonesia(){
 
-// ================= SERVERS =================
-
-const EZSRV_SERVERS = [
-    "https://ds2.ezsrv.net",
-    "https://ds1.ezsrv.net",
-    "https://ds3.ezsrv.net"
-]
-
-// ================= FETCH TIMEOUT =================
-
-async function fetchTimeout(url, options = {}, timeout = 15000) {
-    const controller = new AbortController()
-    const id = setTimeout(() => controller.abort(), timeout)
-
-    const res = await fetch(url, {
-        ...options,
-        signal: controller.signal
-    })
-
-    clearTimeout(id)
-    return res
-}
-
-// ================= DOWNLOAD ENGINE =================
-
-async function ezsrvDownload(link, quality = 128) {
-
-    for (const server of EZSRV_SERVERS) {
-
-        try {
-
-            const res = await fetchTimeout(`${server}/api/convert`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0",
-                    "Origin": "https://ezconv.cc",
-                    "Referer": "https://ezconv.cc/"
-                },
-                body: JSON.stringify({
-                    url: link,
-                    quality: String(quality),
-                    trim: false,
-                    startT: 0,
-                    endT: 0
-                })
-            })
-
-            const data = await res.json()
-
-            if (data.status === "done" && data.url) {
-
-                return {
-                    status: true,
-                    server: server,
-                    url: data.url,
-                    title: data.title,
-                    quality: quality + "kbps"
-                }
-
-            }
-
-        } catch (err) {
-
-            console.log(`Server failed: ${server}`)
-            console.log(err.message)
-
-        }
-
-    }
-
-    return {
-        status: false,
-        message: "Semua server ezsrv gagal"
-    }
+ return new Date().toLocaleString("id-ID",{
+  timeZone:"Asia/Jakarta",
+  weekday:"long",
+  day:"numeric",
+  month:"long",
+  year:"numeric",
+  hour:"2-digit",
+  minute:"2-digit",
+  second:"2-digit"
+ })
 
 }
+
+// ================= SAVETUBE CLASS =================
+
+class Savetube {
+
+ constructor() {
+  this.ky = "C5D58EF67A7584E4A29F6C35BBC4EB12"
+
+  this.hr = {
+   "content-type": "application/json",
+   "origin": "https://yt.savetube.vip",
+   "user-agent": "Mozilla/5.0"
+  }
+
+  this.fmt = ["144","240","360","480","720","1080","mp3"]
+
+  this.m = /^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:shorts\/)?([a-zA-Z0-9_-]{11})/
+ }
+
+ async decrypt(enc){
+
+  const sr = Buffer.from(enc,"base64")
+  const ky = Buffer.from(this.ky,"hex")
+
+  const iv = sr.slice(0,16)
+  const dt = sr.slice(16)
+
+  const dc = crypto.createDecipheriv("aes-128-cbc",ky,iv)
+
+  return JSON.parse(
+   Buffer.concat([
+    dc.update(dt),
+    dc.final()
+   ]).toString()
+  )
+
+ }
+
+ async getCdn(){
+
+  const res = await axios.get(
+   "https://media.savetube.vip/api/random-cdn",
+   {headers:this.hr}
+  )
+
+  return res.data.cdn
+
+ }
+
+ async download(url){
+
+  const id = url.match(this.m)?.[3]
+
+  if(!id) throw new Error("URL youtube tidak valid")
+
+  const cdn = await this.getCdn()
+
+  const info = await axios.post(
+   `https://${cdn}/v2/info`,
+   { url:`https://www.youtube.com/watch?v=${id}` },
+   { headers:this.hr }
+  )
+
+  const dec = await this.decrypt(info.data.data)
+
+  const dl = await axios.post(
+   `https://${cdn}/download`,
+   {
+    id:id,
+    downloadType:"audio",
+    quality:"128",
+    key:dec.key
+   },
+   {headers:this.hr}
+  )
+
+  return {
+
+   title:dec.title,
+   duration:dec.duration,
+   thumbnail:dec.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+   download:dl.data.data.downloadUrl
+
+  }
+
+ }
+
+}
+
+const savetube = new Savetube()
 
 // ================= ROOT =================
 
-app.get('/', (req, res) => {
+app.get("/",(req,res)=>{
 
-    res.json({
-        name: "YouTube Audio Downloader API",
-        version: "v4",
-        creator: "FebryJW 🚀",
-        endpoints: {
-            audio: "/api/v1/youtube/audio?url=",
-            play: "/api/v1/youtube/ytplaymp3?query="
-        },
-        servers: EZSRV_SERVERS
-    })
+ res.json({
 
-})
+  creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
 
-// ================= AUDIO =================
+  endpoints:{
+   play:"/api/v1/youtube/yeteplay?query=lagu",
+   mp3:"/api/v1/youtube/ytmp3?url=youtube_url"
+  }
 
-app.get('/api/v1/youtube/audio', async (req, res) => {
-
-    const { url, quality = 128 } = req.query
-
-    if (!url)
-        return res.status(400).json({
-            status: false,
-            message: "url diperlukan"
-        })
-
-    const id = getYoutubeId(url)
-
-    if (!id)
-        return res.status(400).json({
-            status: false,
-            message: "URL youtube tidak valid"
-        })
-
-    try {
-
-        const videoUrl = `https://youtube.com/watch?v=${id}`
-
-        const meta = await yts(videoUrl)
-        const video = meta.all[0] || null
-
-        const download = await ezsrvDownload(videoUrl, parseInt(quality))
-
-        if (!download.status)
-            return res.status(500).json(download)
-
-        res.json({
-
-            status: true,
-
-            metadata: video
-                ? {
-                      title: video.title,
-                      videoId: video.videoId,
-                      duration: video.timestamp,
-                      thumbnail: video.thumbnail,
-                      author: video.author?.name
-                  }
-                : null,
-
-            download: {
-                url: download.url,
-                title: download.title,
-                quality: download.quality,
-                server: download.server
-            }
-
-        })
-
-    } catch (err) {
-
-        res.status(500).json({
-            status: false,
-            message: err.message
-        })
-
-    }
+ })
 
 })
 
-// ================= SEARCH =================
+// ================= YETEPLAY =================
 
-app.get('/api/v1/youtube/ytplaymp3', async (req, res) => {
+app.get("/api/v1/youtube/yeteplay", async(req,res)=>{
 
-    const { query, quality = 128 } = req.query
+ try{
 
-    if (!query)
-        return res.status(400).json({
-            status: false,
-            message: "query diperlukan"
-        })
+  const {query} = req.query
 
-    try {
+  if(!query)
+   return res.json({
+    waktu_indonesia:waktuIndonesia(),
+    status:false,
+    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+    respon_data:"query diperlukan"
+   })
 
-        const search = await yts(query)
+  const search = await yts(query)
 
-        if (!search.all.length)
-            return res.status(404).json({
-                status: false,
-                message: "video tidak ditemukan"
-            })
+  if(!search.all.length)
+   return res.json({
+    waktu_indonesia:waktuIndonesia(),
+    status:false,
+    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+    respon_data:"video tidak ditemukan"
+   })
 
-        const first = search.all[0]
+  const video = search.all[0]
 
-        const download = await ezsrvDownload(first.url, parseInt(quality))
+  const data = await savetube.download(video.url)
 
-        if (!download.status)
-            return res.status(500).json(download)
+  res.json({
 
-        res.json({
+   waktu_indonesia:waktuIndonesia(),
+   status:true,
+   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
 
-            status: true,
+   respon_data:{
+    title:video.title,
+    duration:video.timestamp,
+    thumbnail:video.thumbnail,
+    url:video.url,
+    download:data.download
+   }
 
-            query,
+  })
 
-            selected_video: {
-                title: first.title,
-                url: first.url,
-                videoId: first.videoId,
-                duration: first.timestamp,
-                thumbnail: first.thumbnail,
-                author: first.author?.name
-            },
+ }catch(e){
 
-            download: {
-                url: download.url,
-                title: download.title,
-                quality: download.quality,
-                server: download.server
-            }
+  res.json({
+   waktu_indonesia:waktuIndonesia(),
+   status:false,
+   creator:"𝐅𝐞𝐛𝐫𝐫𝐲𝐉𝐖 🚀",
+   respon_data:e.message
+  })
 
-        })
-
-    } catch (err) {
-
-        res.status(500).json({
-            status: false,
-            message: err.message
-        })
-
-    }
+ }
 
 })
 
-// ================= START =================
+// ================= YTMP3 =================
 
-app.listen(PORT, () => {
+app.get("/api/v1/youtube/ytmp3", async(req,res)=>{
 
-    console.log("=================================")
-    console.log("🚀 YOUTUBE DOWNLOADER API RUNNING")
-    console.log("PORT:", PORT)
-    console.log("=================================")
+ try{
+
+  const {url} = req.query
+
+  if(!url)
+   return res.json({
+    waktu_indonesia:waktuIndonesia(),
+    status:false,
+    creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+    respon_data:"url diperlukan"
+   })
+
+  const data = await savetube.download(url)
+
+  res.json({
+
+   waktu_indonesia:waktuIndonesia(),
+   status:true,
+   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+
+   respon_data:data
+
+  })
+
+ }catch(e){
+
+  res.json({
+   waktu_indonesia:waktuIndonesia(),
+   status:false,
+   creator:"𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+   respon_data:e.message
+  })
+
+ }
 
 })
 
