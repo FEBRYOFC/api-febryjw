@@ -16,7 +16,6 @@ const HEADERS = {
     'user-agent': 'Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0'
 };
 const FORMATS = ['144', '240', '360', '480', '720', '1080', 'mp3'];
-const CDN_LIST = ['cdn400.savetube.vip', 'cdn401.savetube.vip', 'cdn402.savetube.vip', 'cdn403.savetube.vip'];
 
 // ========== [ FUNGSI EKSTRAK ID YOUTUBE ] ==========
 function extractYoutubeId(url) {
@@ -66,49 +65,21 @@ async function decryptData(enc) {
 
 // ========== [ FUNGSI DAPATKAN CDN ] ==========
 async function getCdn() {
-    try {
-        const response = await axios.get("https://media.savetube.vip/api/random-cdn", { 
-            headers: HEADERS,
-            timeout: 5000 
-        });
-        if (response.data && response.data.cdn) {
-            console.log("CDN from API:", response.data.cdn);
-            return response.data.cdn;
-        }
-    } catch (error) {
-        console.log("Random CDN API failed, using fallback list");
+    const response = await axios.get("https://media.savetube.vip/api/random-cdn", { 
+        headers: HEADERS,
+        timeout: 5000 
+    });
+    
+    if (!response.data || !response.data.cdn) {
+        throw new Error("Gagal mendapatkan CDN dari API");
     }
     
-    const randomCdn = CDN_LIST[Math.floor(Math.random() * CDN_LIST.length)];
-    console.log("Using fallback CDN:", randomCdn);
-    return randomCdn;
+    console.log("CDN from API:", response.data.cdn);
+    return response.data.cdn;
 }
 
-// ========== [ FUNGSI VALIDASI URL ] ==========
-async function validateUrl(url, retries = 3, delay = 2000) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await axios.head(url, { 
-                timeout: 5000,
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-            });
-            if (response.status === 200) {
-                console.log(`URL valid pada percobaan ke-${i + 1}`);
-                return true;
-            }
-        } catch (error) {
-            console.log(`Percobaan ${i + 1} gagal: ${error.message}`);
-        }
-        if (i < retries - 1) {
-            console.log(`Menunggu ${delay/1000} detik sebelum mencoba lagi...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-    return false;
-}
-
-// ========== [ FUNGSI DOWNLOAD UTAMA ] ==========
-async function downloadFromSavetube(url, format = 'mp3', retryCount = 0) {
+// ========== [ FUNGSI UTAMA DOWNLOAD ] ==========
+async function downloadFromSavetube(url, format = 'mp3') {
     const id = extractYoutubeId(url);
     if (!id) {
         throw new Error("Gagal mengekstrak ID YouTube dari URL");
@@ -121,67 +92,45 @@ async function downloadFromSavetube(url, format = 'mp3', retryCount = 0) {
     const cdn = await getCdn();
     console.log(`Menggunakan CDN: ${cdn} untuk video ID: ${id}`);
     
-    try {
-        // Request info video
-        const infoResponse = await axios.post(`https://${cdn}/v2/info`, {
-            url: `https://www.youtube.com/watch?v=${id}`
-        }, { 
-            headers: HEADERS,
-            timeout: 15000 
-        });
-        
-        if (!infoResponse.data || !infoResponse.data.data) {
-            throw new Error("Respon tidak valid dari endpoint info");
-        }
-        
-        const videoInfo = await decryptData(infoResponse.data.data);
-        
-        // Request download URL
-        const downloadResponse = await axios.post(`https://${cdn}/download`, {
-            id: id,
-            downloadType: format === 'mp3' ? 'audio' : 'video',
-            quality: format === 'mp3' ? '128' : format,
-            key: videoInfo.key
-        }, { 
-            headers: HEADERS,
-            timeout: 20000 
-        });
-
-        if (!downloadResponse.data || !downloadResponse.data.data || !downloadResponse.data.data.downloadUrl) {
-            throw new Error("Respon tidak valid dari endpoint download");
-        }
-
-        const downloadUrl = downloadResponse.data.data.downloadUrl;
-        
-        // Validasi URL
-        console.log("Memvalidasi URL download...");
-        const isValid = await validateUrl(downloadUrl);
-        
-        if (!isValid) {
-            if (retryCount < 2) {
-                console.log(`URL tidak valid, mencoba dengan CDN berbeda (percobaan ${retryCount + 1})...`);
-                return downloadFromSavetube(url, format, retryCount + 1);
-            } else {
-                throw new Error("URL download tidak valid setelah beberapa percobaan dengan CDN berbeda");
-            }
-        }
-
-        return {
-            title: videoInfo.title,
-            format: format,
-            thumbnail: videoInfo.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-            duration: videoInfo.duration,
-            url: downloadUrl
-        };
-        
-    } catch (error) {
-        if (retryCount < 2) {
-            console.log(`Error dengan CDN ${cdn}, mencoba CDN lain (percobaan ${retryCount + 1})...`);
-            return downloadFromSavetube(url, format, retryCount + 1);
-        } else {
-            throw error;
-        }
+    // Request info video
+    const infoResponse = await axios.post(`https://${cdn}/v2/info`, {
+        url: `https://www.youtube.com/watch?v=${id}`
+    }, { 
+        headers: HEADERS,
+        timeout: 15000 
+    });
+    
+    if (!infoResponse.data || !infoResponse.data.data) {
+        throw new Error("Respon tidak valid dari endpoint info");
     }
+    
+    const videoInfo = await decryptData(infoResponse.data.data);
+    
+    // Request download URL
+    const downloadResponse = await axios.post(`https://${cdn}/download`, {
+        id: id,
+        downloadType: format === 'mp3' ? 'audio' : 'video',
+        quality: format === 'mp3' ? '128' : format,
+        key: videoInfo.key
+    }, { 
+        headers: HEADERS,
+        timeout: 20000 
+    });
+
+    if (!downloadResponse.data || !downloadResponse.data.data || !downloadResponse.data.data.downloadUrl) {
+        throw new Error("Respon tidak valid dari endpoint download");
+    }
+
+    const downloadUrl = downloadResponse.data.data.downloadUrl;
+    console.log("Download URL:", downloadUrl);
+    
+    return {
+        title: videoInfo.title,
+        format: format,
+        thumbnail: videoInfo.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        duration: videoInfo.duration,
+        url: downloadUrl
+    };
 }
 
 // ========== [ FUNGSI WAKTU INDONESIA ] ==========
@@ -324,7 +273,6 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
             });
         }
 
-        // Cari video di YouTube
         const search = await yts(query);
         if (!search.videos || search.videos.length === 0) {
             throw new Error("Tidak ada video ditemukan untuk pencarian ini");
@@ -333,7 +281,6 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
         const video = search.videos[0];
         console.log(`Video ditemukan: ${video.title} (${video.url})`);
         
-        // Download audio dari video pertama
         const result = await downloadFromSavetube(video.url, "mp3");
 
         res.json({
