@@ -16,7 +16,7 @@ const HEADERS = {
     'user-agent': 'Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0'
 };
 const FORMATS = ['144', '240', '360', '480', '720', '1080', 'mp3'];
-const CDN = 'cdn403.savetube.vip'; // Diperbaiki menjadi cdn403
+const CDN = 'cdn403.savetube.vip'; // CDN tetap yang work
 
 // ========== [ FUNGSI EKSTRAK ID YOUTUBE ] ==========
 function extractYoutubeId(url) {
