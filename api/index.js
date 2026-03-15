@@ -16,6 +16,7 @@ const HEADERS = {
     'user-agent': 'Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0'
 };
 const FORMATS = ['144', '240', '360', '480', '720', '1080', 'mp3'];
+const CDN = 'cdn3.savetube.vip'; // Langsung pakai cdn3
 
 // ========== [ FUNGSI EKSTRAK ID YOUTUBE ] ==========
 function extractYoutubeId(url) {
@@ -63,21 +64,6 @@ async function decryptData(enc) {
     }
 }
 
-// ========== [ FUNGSI DAPATKAN CDN ] ==========
-async function getCdn() {
-    const response = await axios.get("https://media.savetube.vip/api/random-cdn", { 
-        headers: HEADERS,
-        timeout: 5000 
-    });
-    
-    if (!response.data || !response.data.cdn) {
-        throw new Error("Gagal mendapatkan CDN dari API");
-    }
-    
-    console.log("CDN from API:", response.data.cdn);
-    return response.data.cdn;
-}
-
 // ========== [ FUNGSI UTAMA DOWNLOAD ] ==========
 async function downloadFromSavetube(url, format = 'mp3') {
     const id = extractYoutubeId(url);
@@ -89,11 +75,10 @@ async function downloadFromSavetube(url, format = 'mp3') {
         throw new Error(`Format tidak tersedia. Pilih: ${FORMATS.join(', ')}`);
     }
     
-    const cdn = await getCdn();
-    console.log(`Menggunakan CDN: ${cdn} untuk video ID: ${id}`);
+    console.log(`Menggunakan CDN: ${CDN} untuk video ID: ${id}`);
     
     // Request info video
-    const infoResponse = await axios.post(`https://${cdn}/v2/info`, {
+    const infoResponse = await axios.post(`https://${CDN}/v2/info`, {
         url: `https://www.youtube.com/watch?v=${id}`
     }, { 
         headers: HEADERS,
@@ -107,7 +92,7 @@ async function downloadFromSavetube(url, format = 'mp3') {
     const videoInfo = await decryptData(infoResponse.data.data);
     
     // Request download URL
-    const downloadResponse = await axios.post(`https://${cdn}/download`, {
+    const downloadResponse = await axios.post(`https://${CDN}/download`, {
         id: id,
         downloadType: format === 'mp3' ? 'audio' : 'video',
         quality: format === 'mp3' ? '128' : format,
