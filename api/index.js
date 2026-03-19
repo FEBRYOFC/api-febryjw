@@ -17,6 +17,7 @@ const HEADERS = {
 };
 const FORMATS = ['144', '240', '360', '480', '720', '1080', 'mp3'];
 const CDNS = ['cdn403.savetube.vip', 'cdn400.savetube.vip']; // Daftar CDN yang work
+const BLOCKED_CDNS = ['cdn401.savetube.vip', 'cdn402.savetube.vip']; // CDN yang error
 
 // ========== [ FUNGSI EKSTRAK ID YOUTUBE ] ==========
 function extractYoutubeId(url) {
@@ -75,6 +76,27 @@ async function checkCDN(cdn) {
     } catch (error) {
         console.log(`CDN ${cdn} tidak dapat diakses: ${error.message}`);
         return false;
+    }
+}
+
+// ========== [ FUNGSI REPLACE CDN URL ] ==========
+function replaceCDNinUrl(downloadUrl, targetCDN) {
+    try {
+        // Cari domain CDN di URL
+        const urlObj = new URL(downloadUrl);
+        const currentHost = urlObj.hostname;
+        
+        // Cek apakah host saat ini termasuk dalam BLOCKED_CDNS
+        if (BLOCKED_CDNS.includes(currentHost)) {
+            console.log(`Mengganti CDN dari ${currentHost} ke ${targetCDN}`);
+            urlObj.hostname = targetCDN;
+            return urlObj.toString();
+        }
+        
+        return downloadUrl;
+    } catch (error) {
+        console.log("Gagal mengganti CDN di URL:", error.message);
+        return downloadUrl;
     }
 }
 
@@ -150,7 +172,11 @@ async function downloadFromSavetube(url, format = 'mp3', cdnAttempt = 0) {
             throw new Error("Respon tidak valid dari endpoint download");
         }
 
-        const downloadUrl = downloadResponse.data.data.downloadUrl;
+        let downloadUrl = downloadResponse.data.data.downloadUrl;
+        
+        // Ganti CDN di URL download jika menggunakan CDN yang diblokir
+        downloadUrl = replaceCDNinUrl(downloadUrl, currentCDN);
+        
         console.log("Download URL berhasil didapatkan dari CDN:", currentCDN);
         
         return {
@@ -209,10 +235,12 @@ app.get("/", (req, res) => {
         creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
         message: "YouTube Downloader API (Savetube) dengan Multiple CDN",
         available_cdns: CDNS,
+        blocked_cdns: BLOCKED_CDNS,
         endpoints: {
             audio: "/api/v1/youtube/audio?url=YOUTUBE_URL",
             video: "/api/v1/youtube/video?url=YOUTUBE_URL&resolusi=720",
-            playmp3: "/api/v1/youtube/ytplaymp3?query=SEARCH_QUERY"
+            playmp3: "/api/v1/youtube/ytplaymp3?query=SEARCH_QUERY",
+            cdn_status: "/api/v1/youtube/cdn-status"
         },
         timestamp: new Date().toISOString()
     });
@@ -383,7 +411,10 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
 app.get("/api/v1/youtube/cdn-status", async (req, res) => {
     const results = {};
     
-    for (const cdn of CDNS) {
+    // Cek semua CDN termasuk yang diblokir
+    const allCDNs = [...CDNS, ...BLOCKED_CDNS];
+    
+    for (const cdn of allCDNs) {
         try {
             await axios.get(`https://${cdn}`, {
                 timeout: 5000,
