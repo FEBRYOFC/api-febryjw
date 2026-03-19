@@ -16,7 +16,7 @@ const HEADERS = {
     'user-agent': 'Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0'
 };
 const FORMATS = ['144', '240', '360', '480', '720', '1080', 'mp3'];
-const CDN = 'cdn403.savetube.vip'; // CDN tetap yang work
+const CDNS = ['cdn403.savetube.vip', 'cdn400.savetube.vip']; // Daftar CDN yang work
 
 // ========== [ FUNGSI EKSTRAK ID YOUTUBE ] ==========
 function extractYoutubeId(url) {
@@ -64,8 +64,49 @@ async function decryptData(enc) {
     }
 }
 
+// ========== [ FUNGSI CEK CDN ] ==========
+async function checkCDN(cdn) {
+    try {
+        await axios.get(`https://${cdn}`, {
+            timeout: 5000,
+            headers: HEADERS
+        });
+        return true;
+    } catch (error) {
+        console.log(`CDN ${cdn} tidak dapat diakses: ${error.message}`);
+        return false;
+    }
+}
+
+// ========== [ FUNGSI DAPATKAN CDN WORK ] ==========
+async function getWorkingCDN() {
+    // Urutan prioritas CDN
+    const priorityCDNs = ['cdn403.savetube.vip', 'cdn400.savetube.vip'];
+    
+    for (const cdn of priorityCDNs) {
+        const isWorking = await checkCDN(cdn);
+        if (isWorking) {
+            console.log(`Menggunakan CDN: ${cdn}`);
+            return cdn;
+        }
+    }
+    
+    // Jika semua CDN prioritas gagal, coba dari daftar lengkap
+    for (const cdn of CDNS) {
+        if (!priorityCDNs.includes(cdn)) {
+            const isWorking = await checkCDN(cdn);
+            if (isWorking) {
+                console.log(`Menggunakan CDN alternatif: ${cdn}`);
+                return cdn;
+            }
+        }
+    }
+    
+    throw new Error("Tidak ada CDN yang tersedia");
+}
+
 // ========== [ FUNGSI UTAMA DOWNLOAD ] ==========
-async function downloadFromSavetube(url, format = 'mp3') {
+async function downloadFromSavetube(url, format = 'mp3', cdnAttempt = 0) {
     const id = extractYoutubeId(url);
     if (!id) {
         throw new Error("Gagal mengekstrak ID YouTube dari URL");
@@ -75,47 +116,76 @@ async function downloadFromSavetube(url, format = 'mp3') {
         throw new Error(`Format tidak tersedia. Pilih: ${FORMATS.join(', ')}`);
     }
     
-    console.log(`Menggunakan CDN: ${CDN} untuk video ID: ${id}`);
+    // Dapatkan CDN yang work
+    const currentCDN = await getWorkingCDN();
+    console.log(`Mencoba dengan CDN: ${currentCDN} untuk video ID: ${id} (Percobaan ke-${cdnAttempt + 1})`);
     
-    // Request info video
-    const infoResponse = await axios.post(`https://${CDN}/v2/info`, {
-        url: `https://www.youtube.com/watch?v=${id}`
-    }, { 
-        headers: HEADERS,
-        timeout: 15000 
-    });
-    
-    if (!infoResponse.data || !infoResponse.data.data) {
-        throw new Error("Respon tidak valid dari endpoint info");
-    }
-    
-    const videoInfo = await decryptData(infoResponse.data.data);
-    
-    // Request download URL
-    const downloadResponse = await axios.post(`https://${CDN}/download`, {
-        id: id,
-        downloadType: format === 'mp3' ? 'audio' : 'video',
-        quality: format === 'mp3' ? '128' : format,
-        key: videoInfo.key
-    }, { 
-        headers: HEADERS,
-        timeout: 20000 
-    });
+    try {
+        // Request info video
+        const infoResponse = await axios.post(`https://${currentCDN}/v2/info`, {
+            url: `https://www.youtube.com/watch?v=${id}`
+        }, { 
+            headers: HEADERS,
+            timeout: 15000 
+        });
+        
+        if (!infoResponse.data || !infoResponse.data.data) {
+            throw new Error("Respon tidak valid dari endpoint info");
+        }
+        
+        const videoInfo = await decryptData(infoResponse.data.data);
+        
+        // Request download URL
+        const downloadResponse = await axios.post(`https://${currentCDN}/download`, {
+            id: id,
+            downloadType: format === 'mp3' ? 'audio' : 'video',
+            quality: format === 'mp3' ? '128' : format,
+            key: videoInfo.key
+        }, { 
+            headers: HEADERS,
+            timeout: 20000 
+        });
 
-    if (!downloadResponse.data || !downloadResponse.data.data || !downloadResponse.data.data.downloadUrl) {
-        throw new Error("Respon tidak valid dari endpoint download");
-    }
+        if (!downloadResponse.data || !downloadResponse.data.data || !downloadResponse.data.data.downloadUrl) {
+            throw new Error("Respon tidak valid dari endpoint download");
+        }
 
-    const downloadUrl = downloadResponse.data.data.downloadUrl;
-    console.log("Download URL:", downloadUrl);
-    
-    return {
-        title: videoInfo.title,
-        format: format,
-        thumbnail: videoInfo.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-        duration: videoInfo.duration,
-        url: downloadUrl
-    };
+        const downloadUrl = downloadResponse.data.data.downloadUrl;
+        console.log("Download URL berhasil didapatkan dari CDN:", currentCDN);
+        
+        return {
+            title: videoInfo.title,
+            format: format,
+            thumbnail: videoInfo.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+            duration: videoInfo.duration,
+            url: downloadUrl,
+            cdn: currentCDN
+        };
+        
+    } catch (error) {
+        console.error(`Gagal dengan CDN ${currentCDN}:`, error.message);
+        
+        // Cek apakah error karena CDN mati (401, 402, atau error koneksi)
+        if (error.response) {
+            const statusCode = error.response.status;
+            if (statusCode === 401 || statusCode === 402 || statusCode >= 500) {
+                console.log(`CDN ${currentCDN} error dengan kode ${statusCode}, mencoba CDN lain...`);
+                
+                // Paksa refresh CDN dengan mencoba ulang tanpa batasan percobaan
+                if (cdnAttempt < CDNS.length * 2) { // Maksimal percobaan 2x jumlah CDN
+                    return downloadFromSavetube(url, format, cdnAttempt + 1);
+                }
+            }
+        } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+            console.log(`CDN ${currentCDN} tidak dapat dihubungi, mencoba CDN lain...`);
+            
+            if (cdnAttempt < CDNS.length * 2) {
+                return downloadFromSavetube(url, format, cdnAttempt + 1);
+            }
+        }
+        
+        throw new Error(`Gagal download dari semua CDN: ${error.message}`);
+    }
 }
 
 // ========== [ FUNGSI WAKTU INDONESIA ] ==========
@@ -137,7 +207,8 @@ app.get("/", (req, res) => {
     res.json({
         status: true,
         creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-        message: "YouTube Downloader API (Savetube)",
+        message: "YouTube Downloader API (Savetube) dengan Multiple CDN",
+        available_cdns: CDNS,
         endpoints: {
             audio: "/api/v1/youtube/audio?url=YOUTUBE_URL",
             video: "/api/v1/youtube/video?url=YOUTUBE_URL&resolusi=720",
@@ -175,7 +246,8 @@ app.get("/api/v1/youtube/audio", async (req, res) => {
                 thumbnail: result.thumbnail,
                 url: result.url,
                 format: "mp3",
-                quality: "128kbps"
+                quality: "128kbps",
+                cdn_used: result.cdn
             },
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
@@ -222,7 +294,8 @@ app.get("/api/v1/youtube/video", async (req, res) => {
                 thumbnail: result.thumbnail,
                 url: result.url,
                 format: "mp4",
-                quality: resolusi + "p"
+                quality: resolusi + "p",
+                cdn_used: result.cdn
             },
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
@@ -285,7 +358,8 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
                     duration: result.duration,
                     url: result.url,
                     format: "mp3",
-                    quality: "128kbps"
+                    quality: "128kbps",
+                    cdn_used: result.cdn
                 }
             },
             timestamp: new Date().toISOString(),
@@ -303,6 +377,30 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
             response_time: `${Date.now() - start}ms`
         });
     }
+});
+
+// ========== [ ENDPOINT CEK STATUS CDN ] ==========
+app.get("/api/v1/youtube/cdn-status", async (req, res) => {
+    const results = {};
+    
+    for (const cdn of CDNS) {
+        try {
+            await axios.get(`https://${cdn}`, {
+                timeout: 5000,
+                headers: HEADERS
+            });
+            results[cdn] = "Online";
+        } catch (error) {
+            results[cdn] = `Offline (${error.message})`;
+        }
+    }
+    
+    res.json({
+        status: true,
+        creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+        cdns: results,
+        timestamp: new Date().toISOString()
+    });
 });
 
 module.exports = app;
