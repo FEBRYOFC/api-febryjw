@@ -7,72 +7,76 @@ const yts = require("yt-search");
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ========== [ KONSTANTA SAVE TUBE ] ==========
+const SAVE_TUBE_KEY = "C5D58EF67A7584E4A29F6C35BBC4EB12";
+const SAVE_TUBE_ORIGIN = "https://save-tube.com";
+const SAVE_TUBE_REFERER = "https://save-tube.com/";
+const RANDOM_CDN_API = "https://media.savetube.vip/api/random-cdn";
+
+const SAVE_TUBE_HEADERS = {
+    "content-type": "application/json",
+    origin: SAVE_TUBE_ORIGIN,
+    referer: SAVE_TUBE_REFERER,
+    "user-agent": "Mozilla/5.0 (Android 10; Mobile; rv:148.0) Gecko/148.0 Firefox/148.0"
+};
+
+const FORMATS = ["144", "240", "360", "480", "720", "1080", "mp3"];
+
+// ========== [ KONSTANTA TIKTOK ] ==========
+const TIKWM_API = "https://tikwm.com/api";
+const TIKTOK_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json"
+};
 
 // ========== [ FUNGSI UNTUK RESPON JSON YANG RAPI ] ==========
 function jsonResponse(res, statusCode, data) {
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader("Content-Type", "application/json");
     res.status(statusCode).send(JSON.stringify(data, null, 2));
 }
-
-// ========== [ KONSTANTA YOUTUBE ] ==========
-const KEY = 'C5D58EF67A7584E4A29F6C35BBC4EB12';
-const HEADERS = {
-    'content-type': 'application/json',
-    'origin': 'https://yt.savetube.vip',
-    'user-agent': 'Mozilla/5.0 (Android 15; Mobile; SM-F958; rv:130.0) Gecko/130.0 Firefox/130.0'
-};
-const FORMATS = ['144', '240', '360', '480', '720', '1080', 'mp3'];
-const CDNS = ['cdn403.savetube.vip', 'cdn400.savetube.vip'];
-const BLOCKED_CDNS = ['cdn401.savetube.vip', 'cdn402.savetube.vip'];
-
-// ========== [ KONSTANTA TIKTOK ] ==========
-const TIKWM_API = 'https://tikwm.com/api';
-const TIKTOK_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json'
-};
 
 // ========== [ FUNGSI EKSTRAK ID YOUTUBE ] ==========
 function extractYoutubeId(url) {
     if (!url) return null;
-    
+
     const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
         /youtube\.com\/watch\?.*[?&]v=([a-zA-Z0-9_-]{11})/,
         /^([a-zA-Z0-9_-]{11})$/
     ];
-    
+
     for (const pattern of patterns) {
         const match = url.match(pattern);
-        if (match && match[1]) {
-            return match[1];
-        }
+        if (match && match[1]) return match[1];
     }
-    
+
     try {
         const urlObj = new URL(url);
-        if (urlObj.hostname.includes('youtube.com') || urlObj.hostname.includes('youtu.be')) {
-            if (urlObj.hostname.includes('youtu.be')) {
-                return urlObj.pathname.slice(1);
+        if (urlObj.hostname.includes("youtube.com") || urlObj.hostname.includes("youtu.be")) {
+            if (urlObj.hostname.includes("youtu.be")) {
+                const id = urlObj.pathname.slice(1);
+                return id.length === 11 ? id : null;
             }
-            const v = urlObj.searchParams.get('v');
-            if (v) return v;
+            const v = urlObj.searchParams.get("v");
+            if (v && v.length === 11) return v;
         }
     } catch (e) {}
-    
+
     return null;
 }
 
 // ========== [ FUNGSI EKSTRAK URL TIKTOK ] ==========
 function extractTikTokUrl(url) {
     if (!url) return null;
-    
+
     const patterns = [
         /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/(?:@[\w.-]+\/video\/(\d+)|v\/(\d+)|t\/([\w]+))/,
         /(?:https?:\/\/)?(?:www\.)?tiktoklite\.com\/(?:@[\w.-]+\/video\/(\d+)|v\/(\d+)|t\/([\w]+))/,
         /(?:https?:\/\/)?(?:vm\.tiktok\.com\/([\w]+))/
     ];
-    
+
     for (const pattern of patterns) {
         const match = url.match(pattern);
         if (match) {
@@ -81,23 +85,23 @@ function extractTikTokUrl(url) {
                 return {
                     original: url,
                     videoId: videoId,
-                    platform: url.includes('tiktoklite.com') ? 'lite' : 'standard'
+                    platform: url.includes("tiktoklite.com") ? "lite" : "standard"
                 };
             }
         }
     }
-    
+
     return null;
 }
 
 // ========== [ FUNGSI DECRYPT ] ==========
 async function decryptData(enc) {
     try {
-        const sr = Buffer.from(enc, 'base64');
-        const key = Buffer.from(KEY, 'hex');
+        const sr = Buffer.from(enc, "base64");
+        const key = Buffer.from(SAVE_TUBE_KEY, "hex");
         const iv = sr.slice(0, 16);
         const data = sr.slice(16);
-        const decipher = crypto.createDecipheriv('aes-128-cbc', key, iv);
+        const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv);
         const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
         return JSON.parse(decrypted.toString());
     } catch (e) {
@@ -105,84 +109,152 @@ async function decryptData(enc) {
     }
 }
 
-// ========== [ FUNGSI CEK CDN ] ==========
-async function checkCDN(cdn) {
+// ========== [ RANDOM CDN DARI API RESMI ] ==========
+async function getRandomCDN() {
     try {
-        await axios.get(`https://${cdn}`, {
-            timeout: 5000,
-            headers: HEADERS
-        });
-        return true;
-    } catch (error) {
-        console.log(`CDN ${cdn} tidak dapat diakses: ${error.message}`);
-        return false;
-    }
-}
-
-// ========== [ FUNGSI REPLACE CDN URL ] ==========
-function replaceCDNinUrl(downloadUrl, targetCDN) {
-    try {
-        const urlObj = new URL(downloadUrl);
-        const currentHost = urlObj.hostname;
-        
-        if (BLOCKED_CDNS.includes(currentHost)) {
-            console.log(`Mengganti CDN dari ${currentHost} ke ${targetCDN}`);
-            urlObj.hostname = targetCDN;
-            return urlObj.toString();
-        }
-        
-        return downloadUrl;
-    } catch (error) {
-        console.log("Gagal mengganti CDN di URL:", error.message);
-        return downloadUrl;
-    }
-}
-
-// ========== [ FUNGSI DAPATKAN CDN WORK ] ==========
-async function getWorkingCDN() {
-    const priorityCDNs = ['cdn403.savetube.vip', 'cdn400.savetube.vip'];
-    
-    for (const cdn of priorityCDNs) {
-        const isWorking = await checkCDN(cdn);
-        if (isWorking) {
-            console.log(`Menggunakan CDN: ${cdn}`);
-            return cdn;
-        }
-    }
-    
-    for (const cdn of CDNS) {
-        if (!priorityCDNs.includes(cdn)) {
-            const isWorking = await checkCDN(cdn);
-            if (isWorking) {
-                console.log(`Menggunakan CDN alternatif: ${cdn}`);
-                return cdn;
+        const response = await axios.get(RANDOM_CDN_API, {
+            timeout: 10000,
+            headers: {
+                "accept": "application/json",
+                "user-agent": SAVE_TUBE_HEADERS["user-agent"]
             }
-        }
+        });
+
+        const cdn = response.data?.cdn;
+        if (!cdn) throw new Error("Response random CDN tidak valid");
+        return cdn;
+    } catch (error) {
+        throw new Error(`Gagal ambil random CDN: ${error.message}`);
     }
-    
-    throw new Error("Tidak ada CDN yang tersedia");
+}
+
+// ========== [ NORMALISASI RESPON INFO ] ==========
+async function normalizeInfoPayload(payload) {
+    if (!payload) {
+        throw new Error("Payload info kosong");
+    }
+
+    if (typeof payload === "string") {
+        return await decryptData(payload);
+    }
+
+    if (typeof payload === "object") {
+        return payload;
+    }
+
+    throw new Error("Format payload info tidak dikenali");
+}
+
+// ========== [ FUNGSI DAPATKAN INFO VIDEO ] ==========
+async function getVideoInfo(cdn, youtubeId) {
+    const response = await axios.post(
+        `https://${cdn}/v2/info`,
+        {
+            url: `https://www.youtube.com/watch?v=${youtubeId}`
+        },
+        {
+            headers: SAVE_TUBE_HEADERS,
+            timeout: 20000
+        }
+    );
+
+    const raw = response.data?.data;
+    const info = await normalizeInfoPayload(raw);
+
+    if (!info) throw new Error("Info video gagal diproses");
+    return info;
+}
+
+// ========== [ FUNGSI REQUEST DOWNLOAD ] ==========
+async function requestDownload(cdn, format, videoInfo) {
+    const isAudio = format === "mp3";
+    const quality = isAudio ? "128" : String(format);
+
+    const key = videoInfo.key || videoInfo.downloadKey || videoInfo.k;
+    if (!key) {
+        throw new Error("Key convert tidak ditemukan dari info video");
+    }
+
+    const response = await axios.post(
+        `https://${cdn}/download`,
+        {
+            downloadType: isAudio ? "audio" : "video",
+            quality: quality,
+            key: key
+        },
+        {
+            headers: {
+                "content-type": "application/json"
+            },
+            timeout: 25000
+        }
+    );
+
+    const downloadUrl = response.data?.data?.downloadUrl;
+    if (!downloadUrl) {
+        throw new Error("downloadUrl tidak ditemukan di response download");
+    }
+
+    return downloadUrl;
+}
+
+// ========== [ FUNGSI UTAMA DOWNLOAD YOUTUBE ] ==========
+async function downloadFromSavetube(url, format = "mp3", attempt = 0, maxAttempt = 5) {
+    const id = extractYoutubeId(url);
+    if (!id) {
+        throw new Error("Gagal mengekstrak ID YouTube dari URL");
+    }
+
+    if (!FORMATS.includes(format)) {
+        throw new Error(`Format tidak tersedia. Pilih: ${FORMATS.join(", ")}`);
+    }
+
+    const cdn = await getRandomCDN();
+
+    try {
+        const videoInfo = await getVideoInfo(cdn, id);
+        const downloadUrl = await requestDownload(cdn, format, videoInfo);
+
+        return {
+            title: videoInfo.title || videoInfo.name || "Unknown Title",
+            format: format,
+            thumbnail: videoInfo.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+            duration: videoInfo.duration || videoInfo.length || null,
+            url: downloadUrl,
+            cdn: cdn
+        };
+    } catch (error) {
+        console.error(`Gagal dengan random CDN ${cdn}: ${error.message}`);
+
+        if (attempt < maxAttempt - 1) {
+            return downloadFromSavetube(url, format, attempt + 1, maxAttempt);
+        }
+
+        throw new Error(`Gagal convert dari SaveTube setelah beberapa percobaan: ${error.message}`);
+    }
 }
 
 // ========== [ FUNGSI DOWNLOAD TIKTOK DARI TIKWM ] ==========
 async function downloadFromTikWM(url) {
     try {
-        const response = await axios.post(TIKWM_API, 
+        const response = await axios.post(
+            TIKWM_API,
             `url=${encodeURIComponent(url)}&count=12&cursor=0&web=1&hd=1`,
             {
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
+                    "Content-Type": "application/x-www-form-urlencoded",
                     ...TIKTOK_HEADERS
                 },
                 timeout: 30000
             }
         );
-        
+
         if (!response.data || response.data.code !== 0) {
             throw new Error(response.data?.msg || "Gagal mendapatkan data dari TikWM");
         }
-        
+
         const data = response.data.data;
-        
+
         return {
             id: data.id,
             title: data.title,
@@ -196,12 +268,12 @@ async function downloadFromTikWM(url) {
             hdplay: data.hdplay,
             music: data.music,
             author: {
-                id: data.author.id,
-                unique_id: data.author.unique_id,
-                nickname: data.author.nickname,
-                avatar: data.author.avatar,
-                signature: data.author.signature,
-                verified: data.author.verified
+                id: data.author?.id,
+                unique_id: data.author?.unique_id,
+                nickname: data.author?.nickname,
+                avatar: data.author?.avatar,
+                signature: data.author?.signature,
+                verified: data.author?.verified
             },
             stats: {
                 play_count: data.play_count,
@@ -218,23 +290,24 @@ async function downloadFromTikWM(url) {
 // ========== [ FUNGSI SEARCH TIKTOK ] ==========
 async function searchTikTok(query, count = 20) {
     try {
-        const response = await axios.post(TIKWM_API, 
+        const response = await axios.post(
+            TIKWM_API,
             `query=${encodeURIComponent(query)}&count=${count}&cursor=0&type=0`,
             {
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
+                    "Content-Type": "application/x-www-form-urlencoded",
                     ...TIKTOK_HEADERS
                 },
                 timeout: 30000
             }
         );
-        
+
         if (!response.data || response.data.code !== 0) {
             throw new Error(response.data?.msg || "Gagal melakukan pencarian");
         }
-        
+
         const videos = response.data.data?.videos || [];
-        
+
         return {
             query: query,
             count: videos.length,
@@ -252,95 +325,16 @@ async function searchTikTok(query, count = 20) {
                 play: video.play,
                 wmplay: video.wmplay,
                 hdplay: video.hdplay,
+                music: video.music,
                 author: {
-                    unique_id: video.author.unique_id,
-                    nickname: video.author.nickname,
-                    avatar: video.author.avatar
+                    unique_id: video.author?.unique_id,
+                    nickname: video.author?.nickname,
+                    avatar: video.author?.avatar
                 }
             }))
         };
     } catch (error) {
         throw new Error(`Gagal search TikTok: ${error.message}`);
-    }
-}
-
-// ========== [ FUNGSI UTAMA DOWNLOAD YOUTUBE ] ==========
-async function downloadFromSavetube(url, format = 'mp3', cdnAttempt = 0) {
-    const id = extractYoutubeId(url);
-    if (!id) {
-        throw new Error("Gagal mengekstrak ID YouTube dari URL");
-    }
-    
-    if (!FORMATS.includes(format)) {
-        throw new Error(`Format tidak tersedia. Pilih: ${FORMATS.join(', ')}`);
-    }
-    
-    const currentCDN = await getWorkingCDN();
-    console.log(`Mencoba dengan CDN: ${currentCDN} untuk video ID: ${id} (Percobaan ke-${cdnAttempt + 1})`);
-    
-    try {
-        const infoResponse = await axios.post(`https://${currentCDN}/v2/info`, {
-            url: `https://www.youtube.com/watch?v=${id}`
-        }, { 
-            headers: HEADERS,
-            timeout: 15000 
-        });
-        
-        if (!infoResponse.data || !infoResponse.data.data) {
-            throw new Error("Respon tidak valid dari endpoint info");
-        }
-        
-        const videoInfo = await decryptData(infoResponse.data.data);
-        
-        const downloadResponse = await axios.post(`https://${currentCDN}/download`, {
-            id: id,
-            downloadType: format === 'mp3' ? 'audio' : 'video',
-            quality: format === 'mp3' ? '128' : format,
-            key: videoInfo.key
-        }, { 
-            headers: HEADERS,
-            timeout: 20000 
-        });
-
-        if (!downloadResponse.data || !downloadResponse.data.data || !downloadResponse.data.data.downloadUrl) {
-            throw new Error("Respon tidak valid dari endpoint download");
-        }
-
-        let downloadUrl = downloadResponse.data.data.downloadUrl;
-        downloadUrl = replaceCDNinUrl(downloadUrl, currentCDN);
-        
-        console.log("Download URL berhasil didapatkan dari CDN:", currentCDN);
-        
-        return {
-            title: videoInfo.title,
-            format: format,
-            thumbnail: videoInfo.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-            duration: videoInfo.duration,
-            url: downloadUrl,
-            cdn: currentCDN
-        };
-        
-    } catch (error) {
-        console.error(`Gagal dengan CDN ${currentCDN}:`, error.message);
-        
-        if (error.response) {
-            const statusCode = error.response.status;
-            if (statusCode === 401 || statusCode === 402 || statusCode >= 500) {
-                console.log(`CDN ${currentCDN} error dengan kode ${statusCode}, mencoba CDN lain...`);
-                
-                if (cdnAttempt < CDNS.length * 2) {
-                    return downloadFromSavetube(url, format, cdnAttempt + 1);
-                }
-            }
-        } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
-            console.log(`CDN ${currentCDN} tidak dapat dihubungi, mencoba CDN lain...`);
-            
-            if (cdnAttempt < CDNS.length * 2) {
-                return downloadFromSavetube(url, format, cdnAttempt + 1);
-            }
-        }
-        
-        throw new Error(`Gagal download dari semua CDN: ${error.message}`);
     }
 }
 
@@ -364,8 +358,7 @@ app.get("/", (req, res) => {
         status: true,
         creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
         message: "YouTube & TikTok Downloader API",
-        available_cdns: CDNS,
-        blocked_cdns: BLOCKED_CDNS,
+        random_cdn_source: RANDOM_CDN_API,
         endpoints: {
             youtube: {
                 audio: "/api/v1/youtube/audio?url=YOUTUBE_URL",
@@ -392,10 +385,10 @@ app.get("/", (req, res) => {
 // ========== [ ENDPOINT YOUTUBE AUDIO ] ==========
 app.get("/api/v1/youtube/audio", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { url } = req.query;
-        
+
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -423,10 +416,9 @@ app.get("/api/v1/youtube/audio", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-
     } catch (error) {
         console.error("Audio Error:", error.message);
-        
+
         jsonResponse(res, 500, {
             status: false,
             creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
@@ -440,10 +432,10 @@ app.get("/api/v1/youtube/audio", async (req, res) => {
 // ========== [ ENDPOINT YOUTUBE VIDEO ] ==========
 app.get("/api/v1/youtube/video", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { url, resolusi = "720" } = req.query;
-        
+
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -471,10 +463,9 @@ app.get("/api/v1/youtube/video", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-
     } catch (error) {
         console.error("Video Error:", error.message);
-        
+
         jsonResponse(res, 500, {
             status: false,
             creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
@@ -488,10 +479,10 @@ app.get("/api/v1/youtube/video", async (req, res) => {
 // ========== [ ENDPOINT YOUTUBE PLAY MP3 ] ==========
 app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { query } = req.query;
-        
+
         if (!query) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -506,10 +497,10 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
         if (!search.videos || search.videos.length === 0) {
             throw new Error("Tidak ada video ditemukan untuk pencarian ini");
         }
-        
+
         const video = search.videos[0];
         console.log(`Video ditemukan: ${video.title} (${video.url})`);
-        
+
         const result = await downloadFromSavetube(video.url, "mp3");
 
         jsonResponse(res, 200, {
@@ -536,10 +527,9 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-
     } catch (error) {
         console.error("Ytplaymp3 Error:", error.message);
-        
+
         jsonResponse(res, 500, {
             status: false,
             creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
@@ -552,27 +542,42 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
 
 // ========== [ ENDPOINT CEK STATUS CDN ] ==========
 app.get("/api/v1/youtube/cdn-status", async (req, res) => {
-    const results = {};
-    const allCDNs = [...CDNS, ...BLOCKED_CDNS];
-    
-    for (const cdn of allCDNs) {
-        try {
-            await axios.get(`https://${cdn}`, {
-                timeout: 5000,
-                headers: HEADERS
-            });
-            results[cdn] = "Online";
-        } catch (error) {
-            results[cdn] = `Offline (${error.message})`;
+    const start = Date.now();
+
+    try {
+        const randomSamples = [];
+
+        for (let i = 0; i < 3; i++) {
+            try {
+                const cdn = await getRandomCDN();
+                randomSamples.push({
+                    index: i + 1,
+                    cdn: cdn
+                });
+            } catch (e) {
+                randomSamples.push({
+                    index: i + 1,
+                    error: e.message
+                });
+            }
         }
+
+        jsonResponse(res, 200, {
+            status: true,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            random_cdn_source: RANDOM_CDN_API,
+            samples: randomSamples,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    } catch (error) {
+        jsonResponse(res, 500, {
+            status: false,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
     }
-    
-    jsonResponse(res, 200, {
-        status: true,
-        creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-        cdns: results,
-        timestamp: new Date().toISOString()
-    });
 });
 
 // ==================== [ TIKTOK ENDPOINTS ] ====================
@@ -580,10 +585,10 @@ app.get("/api/v1/youtube/cdn-status", async (req, res) => {
 // ========== [ ENDPOINT TIKTOK MP3 (AUDIO ONLY) ] ==========
 app.get("/FebryJW/api/v1/tiktok/tiktok-mp3", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { url } = req.query;
-        
+
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -592,7 +597,7 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const parsedUrl = extractTikTokUrl(url);
         if (!parsedUrl) {
             return jsonResponse(res, 400, {
@@ -602,9 +607,9 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const result = await downloadFromTikWM(url);
-        
+
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
@@ -620,7 +625,6 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-        
     } catch (error) {
         console.error("TikTok MP3 Error:", error.message);
         jsonResponse(res, 500, {
@@ -636,10 +640,10 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3", async (req, res) => {
 // ========== [ ENDPOINT TIKTOK MP4 (VIDEO WITH WATERMARK) ] ==========
 app.get("/FebryJW/api/v1/tiktok/tiktok-mp4", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { url } = req.query;
-        
+
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -648,7 +652,7 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp4", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const parsedUrl = extractTikTokUrl(url);
         if (!parsedUrl) {
             return jsonResponse(res, 400, {
@@ -658,18 +662,17 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp4", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const result = await downloadFromTikWM(url);
-        
-        // Prioritas: HD > Without Watermark
+
         let videoUrl = result.play;
         let videoQuality = "Standard";
-        
+
         if (result.hdplay && result.hdplay !== "") {
             videoUrl = result.hdplay;
             videoQuality = "HD";
         }
-        
+
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
@@ -688,7 +691,6 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp4", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-        
     } catch (error) {
         console.error("TikTok MP4 Error:", error.message);
         jsonResponse(res, 500, {
@@ -704,10 +706,10 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp4", async (req, res) => {
 // ========== [ ENDPOINT TIKTOK NO WATERMARK (WITHOUT WATERMARK) ] ==========
 app.get("/FebryJW/api/v1/tiktok/tiktok-nowm", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { url } = req.query;
-        
+
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -716,7 +718,7 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-nowm", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const parsedUrl = extractTikTokUrl(url);
         if (!parsedUrl) {
             return jsonResponse(res, 400, {
@@ -726,9 +728,9 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-nowm", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const result = await downloadFromTikWM(url);
-        
+
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
@@ -747,7 +749,6 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-nowm", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-        
     } catch (error) {
         console.error("TikTok NoWM Error:", error.message);
         jsonResponse(res, 500, {
@@ -763,10 +764,10 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-nowm", async (req, res) => {
 // ========== [ ENDPOINT TIKTOK SEARCH ] ==========
 app.get("/FebryJW/api/v1/tiktok/tiktok-search", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { query, count = 20 } = req.query;
-        
+
         if (!query) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -775,9 +776,9 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const result = await searchTikTok(query, parseInt(count));
-        
+
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
@@ -785,7 +786,6 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-        
     } catch (error) {
         console.error("TikTok Search Error:", error.message);
         jsonResponse(res, 500, {
@@ -801,10 +801,10 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search", async (req, res) => {
 // ========== [ ENDPOINT TIKTOK SEARCH MP3 ] ==========
 app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp3", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { query, count = 10 } = req.query;
-        
+
         if (!query) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -813,19 +813,19 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp3", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const searchResult = await searchTikTok(query, parseInt(count));
-        
+
         const audioResults = searchResult.videos.map(video => ({
             id: video.id,
             title: video.title,
             duration: video.duration,
-            audio_url: video.play ? video.play.replace(/\.mp4/, '.mp3') : null,
+            audio_url: video.music || null,
             thumbnail: video.cover,
             author: video.author,
             play_count: video.play_count
         }));
-        
+
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
@@ -837,7 +837,6 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp3", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-        
     } catch (error) {
         console.error("TikTok Search MP3 Error:", error.message);
         jsonResponse(res, 500, {
@@ -853,10 +852,10 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp3", async (req, res) => {
 // ========== [ ENDPOINT TIKTOK SEARCH MP4 ] ==========
 app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp4", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { query, count = 10 } = req.query;
-        
+
         if (!query) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -865,19 +864,18 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp4", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const searchResult = await searchTikTok(query, parseInt(count));
-        
+
         const videoResults = searchResult.videos.map(video => {
-            // Prioritas: HD > Without Watermark
             let videoUrl = video.play;
             let videoQuality = "Standard";
-            
+
             if (video.hdplay && video.hdplay !== "") {
                 videoUrl = video.hdplay;
                 videoQuality = "HD";
             }
-            
+
             return {
                 id: video.id,
                 title: video.title,
@@ -895,7 +893,7 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp4", async (req, res) => {
                 }
             };
         });
-        
+
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
@@ -907,7 +905,6 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp4", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-        
     } catch (error) {
         console.error("TikTok Search MP4 Error:", error.message);
         jsonResponse(res, 500, {
@@ -923,10 +920,10 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp4", async (req, res) => {
 // ========== [ ENDPOINT TIKTOK MP3 & MP4 (VIDEO + AUDIO) ] ==========
 app.get("/FebryJW/api/v1/tiktok/tiktok-mp3-mp4", async (req, res) => {
     const start = Date.now();
-    
+
     try {
         const { url } = req.query;
-        
+
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -935,7 +932,7 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3-mp4", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const parsedUrl = extractTikTokUrl(url);
         if (!parsedUrl) {
             return jsonResponse(res, 400, {
@@ -945,18 +942,17 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3-mp4", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         const result = await downloadFromTikWM(url);
-        
-        // Prioritas untuk video: HD > Without Watermark
+
         let videoUrl = result.play;
         let videoQuality = "Standard";
-        
+
         if (result.hdplay && result.hdplay !== "") {
             videoUrl = result.hdplay;
             videoQuality = "HD";
         }
-        
+
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
@@ -990,7 +986,6 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3-mp4", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-        
     } catch (error) {
         console.error("TikTok MP3 MP4 Error:", error.message);
         jsonResponse(res, 500, {
