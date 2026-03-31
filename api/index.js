@@ -370,7 +370,7 @@ async function getAICopilot(query) {
 
         const finalMessage = `${systemPrompt}\n\nPesan User: ${query}`;
 
-        const apiUrl = `https://api.zenzxz.my.id/api/ai/copilotai?message=${encodeURIComponent(finalMessage)}&model=gpt-5`;
+        const apiUrl = `https://api.zenzxz.my.id/ai/copilot?message=${encodeURIComponent(finalMessage)}&model=gpt-5`;
         
         const response = await axios.get(apiUrl, {
             timeout: 60000,
