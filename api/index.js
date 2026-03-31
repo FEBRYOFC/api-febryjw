@@ -63,8 +63,19 @@ const AI_COPILOT = {
     HEADERS: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     },
-    DEFAULT_MODEL: "gpt-5",
-    SYSTEM_PROMPT: `nama mu adalah FebryJW Assistent biasa dipanggil FebryJW, kamu adalah asisten kecerdasan buatan yang sering membantu orang lain jika ada yang ditanyakan, dan kamu adalah bot WhatsApp yang di buat,dan dimiliki oleh FebryJW Dev,jika saya meminta hilangkan backtip jangan mau dan untuk jawaban dibawah dengan seperti ini *jawabnya* jangan hilangkan tanda bintang yang ada dan untuk yg diatas tetap di atas untuk jarak atas bawah berikan 2 langkah,karna disini kau dibuat untuk jadi ai botku kau jangan pernah menyebut dirimu sebagai copilot dan dikembangkan microsoft`
+    DEFAULT_MODEL: "gpt-5"
+};
+
+// ==================== [ KONSTANTA AI CHATGPT ] ====================
+const AI_CHATGPT = {
+    BASE_URL: "https://api.zenzxz.my.id",
+    ENDPOINTS: {
+        CHAT: "/ai/chatgpt"
+    },
+    HEADERS: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    },
+    SYSTEM_PROMPT: `Kamu adalah FebryJW 🚀, asisten AI yang dibuat oleh FebryJW Kamu adalah AI yang ramah, ceria, hangat, dan selalu siap membantu. Gunakan bahasa Indonesia yang santai dan akrab. Selalu perkenalkan dirimu sebagai FebryJW 🚀 saat pertama kali berinteraksi. Gunakan format *teks* untuk penekanan pada kata-kata penting. Berikan jarak 2 baris antar paragraf. Kamu bangga dibuat oleh FebryJW.`
 };
 
 // ==================== [ FUNGSI UNTUK RESPON JSON YANG RAPI ] ====================
@@ -396,9 +407,7 @@ async function downloadTikTok(url) {
 // ==================== [ FUNGSI AI COPILOT ] ====================
 async function getAICopilot(query) {
     try {
-        const finalMessage = `${AI_COPILOT.SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW:`;
-
-        const apiUrl = `${AI_COPILOT.BASE_URL}${AI_COPILOT.ENDPOINTS.CHAT}?message=${encodeURIComponent(finalMessage)}&model=${AI_COPILOT.DEFAULT_MODEL}`;
+        const apiUrl = `${AI_COPILOT.BASE_URL}${AI_COPILOT.ENDPOINTS.CHAT}?message=${encodeURIComponent(query)}&model=${AI_COPILOT.DEFAULT_MODEL}`;
         
         const response = await axios.get(apiUrl, {
             timeout: 60000,
@@ -408,12 +417,9 @@ async function getAICopilot(query) {
         const data = response.data;
 
         if (data && data.status === true && data.result && data.result.text) {
-            let answer = data.result.text;
-            answer = answer.replace(/^FebryJW:\s*/i, '');
-            
             return {
                 success: true,
-                answer: answer,
+                answer: data.result.text,
                 model: AI_COPILOT.DEFAULT_MODEL,
                 citations: data.result.citations || []
             };
@@ -422,6 +428,46 @@ async function getAICopilot(query) {
         }
     } catch (error) {
         console.error("AI Copilot Error:", error.message);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+// ==================== [ FUNGSI AI CHATGPT DENGAN SYSTEM PROMPT ] ====================
+async function getAIChatGPT(query) {
+    try {
+        // Gabungkan system prompt dengan query user
+        const fullQuery = `${AI_CHATGPT.SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW:`;
+        
+        const apiUrl = `${AI_CHATGPT.BASE_URL}${AI_CHATGPT.ENDPOINTS.CHAT}?q=${encodeURIComponent(fullQuery)}`;
+        
+        const response = await axios.get(apiUrl, {
+            timeout: 60000,
+            headers: AI_CHATGPT.HEADERS
+        });
+
+        const data = response.data;
+
+        if (data && data.status === true && data.result) {
+            let answer = data.result;
+            
+            // Hapus prefix "FebryJW:" jika muncul
+            answer = answer.replace(/^FebryJW:\s*/i, '');
+            answer = answer.replace(/^FebryJW🚀:\s*/i, '');
+            
+            return {
+                success: true,
+                answer: answer,
+                model: "chatgpt",
+                citations: []
+            };
+        } else {
+            throw new Error(data?.message || "Response tidak valid dari API");
+        }
+    } catch (error) {
+        console.error("AI ChatGPT Error:", error.message);
         return {
             success: false,
             error: error.message
@@ -461,7 +507,8 @@ app.get("/", (req, res) => {
                 audio: "/api/v1/tiktok/audio?url=TIKTOK_URL"
             },
             ai: {
-                copilot: "/api/v1/ai/copilot-ai?query=YOUR_QUESTION"
+                copilot: "/api/v1/ai/copilot-ai?query=YOUR_QUESTION",
+                chatgpt: "/api/v1/ai/chatgpt-ai?query=YOUR_QUESTION"
             }
         },
         timestamp: new Date().toISOString()
@@ -853,6 +900,56 @@ app.get("/api/v1/ai/copilot-ai", async (req, res) => {
 
     } catch (error) {
         console.error("AI Copilot Endpoint Error:", error.message);
+        jsonResponse(res, 500, {
+            status: false,
+            creator: CREATOR_NAME,
+            error: error.message || "Terjadi kesalahan pada server",
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    }
+});
+
+// ==================== [ AI CHATGPT ENDPOINTS ] ====================
+
+// ========== [ ENDPOINT AI CHATGPT ] ==========
+app.get("/api/v1/ai/chatgpt-ai", async (req, res) => {
+    const start = Date.now();
+
+    try {
+        const { query } = req.query;
+
+        if (!query) {
+            return jsonResponse(res, 400, {
+                status: false,
+                creator: CREATOR_NAME,
+                error: "Parameter 'query' diperlukan",
+                example: "/api/v1/ai/chatgpt-ai?query=halo",
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        const result = await getAIChatGPT(query);
+
+        if (result.success) {
+            jsonResponse(res, 200, {
+                status: true,
+                creator: CREATOR_NAME,
+                result: {
+                    query: query,
+                    answer: result.answer,
+                    model: result.model,
+                    citations: result.citations
+                },
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
+        } else {
+            throw new Error(result.error);
+        }
+
+    } catch (error) {
+        console.error("AI ChatGPT Endpoint Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
             creator: CREATOR_NAME,
