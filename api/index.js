@@ -3,6 +3,7 @@ const cors = require("cors");
 const axios = require("axios");
 const crypto = require("crypto");
 const yts = require("yt-search");
+const cheerio = require("cheerio");
 
 const app = express();
 app.use(cors());
@@ -25,10 +26,14 @@ const SAVE_TUBE_HEADERS = {
 const FORMATS = ["144", "240", "360", "480", "720", "1080", "mp3"];
 
 // ========== [ KONSTANTA TIKTOK ] ==========
-const TIKWM_API = "https://tikwm.com/api";
-const TIKTOK_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json"
+const NEXRAY_API = "https://api.nexray.web.id/downloader/tiktok";
+const SAVETT_URL = "https://savett.cc/en1/download";
+const SAVETT_HEADERS = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Origin': 'https://savett.cc',
+    'Referer': 'https://savett.cc/en1/download',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 10) Chrome/139.0.0.0 Mobile Safari/537.36'
 };
 
 // ========== [ FUNGSI UNTUK RESPON JSON YANG RAPI ] ==========
@@ -63,33 +68,6 @@ function extractYoutubeId(url) {
             if (v && v.length === 11) return v;
         }
     } catch (e) {}
-
-    return null;
-}
-
-// ========== [ FUNGSI EKSTRAK URL TIKTOK ] ==========
-function extractTikTokUrl(url) {
-    if (!url) return null;
-
-    const patterns = [
-        /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/(?:@[\w.-]+\/video\/(\d+)|v\/(\d+)|t\/([\w]+))/,
-        /(?:https?:\/\/)?(?:www\.)?tiktoklite\.com\/(?:@[\w.-]+\/video\/(\d+)|v\/(\d+)|t\/([\w]+))/,
-        /(?:https?:\/\/)?(?:vm\.tiktok\.com\/([\w]+))/
-    ];
-
-    for (const pattern of patterns) {
-        const match = url.match(pattern);
-        if (match) {
-            const videoId = match[1] || match[2] || match[3];
-            if (videoId) {
-                return {
-                    original: url,
-                    videoId: videoId,
-                    platform: url.includes("tiktoklite.com") ? "lite" : "standard"
-                };
-            }
-        }
-    }
 
     return null;
 }
@@ -234,105 +212,209 @@ async function downloadFromSavetube(url, format = "mp3", attempt = 0, maxAttempt
     }
 }
 
-// ========== [ FUNGSI DOWNLOAD TIKTOK DARI TIKWM ] ==========
-async function downloadFromTikWM(url) {
+// ========== [ FUNGSI TIKTOK DARI NEXRAY API ] ==========
+async function getTikTokFromNexRay(url) {
     try {
-        const response = await axios.post(
-            TIKWM_API,
-            `url=${encodeURIComponent(url)}&count=12&cursor=0&web=1&hd=1`,
+        const response = await axios.get(`${NEXRAY_API}?url=${encodeURIComponent(url)}`, {
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        if (response.data?.status) {
+            return {
+                success: true,
+                data: response.data.result,
+                source: 'nexray'
+            };
+        }
+        return { success: false, error: 'NexRay API gagal' };
+    } catch (error) {
+        console.error('NexRay API error:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+// ========== [ FUNGSI TIKTOK DARI SAVETT (SCRAPE) ] ==========
+async function getTikTokFromSaveTT(url) {
+    try {
+        // Ambil halaman utama untuk mendapatkan CSRF token dan cookie
+        const page = await axios.get(SAVETT_URL, {
+            headers: SAVETT_HEADERS
+        });
+
+        const csrf = page.data.match(/name="csrf_token" value="([^"]+)"/)?.[1];
+        const cookie = page.headers['set-cookie']?.map(v => v.split(';')[0]).join('; ');
+
+        if (!csrf) {
+            throw new Error('CSRF token tidak ditemukan');
+        }
+
+        // Kirim request download
+        const post = await axios.post(
+            SAVETT_URL,
+            `csrf_token=${encodeURIComponent(csrf)}&url=${encodeURIComponent(url)}`,
             {
                 headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    ...TIKTOK_HEADERS
+                    ...SAVETT_HEADERS,
+                    Cookie: cookie || ''
                 },
                 timeout: 30000
             }
         );
 
-        if (!response.data || response.data.code !== 0) {
-            throw new Error(response.data?.msg || "Gagal mendapatkan data dari TikWM");
-        }
+        const $ = cheerio.load(post.data);
 
-        const data = response.data.data;
+        // Ekstrak data
+        const username = $('#video-info h3').first().text().trim() || '-';
+        const desc = $('.desc-video').first().text().trim() || '-';
+        
+        // Ekstrak stats
+        const stats = {};
+        $('.info-download li').each((_, el) => {
+            const text = $(el).text().toLowerCase();
+            if (text.includes('like')) stats.likes = text.match(/\d+/)?.[0] || '0';
+            if (text.includes('comment')) stats.comments = text.match(/\d+/)?.[0] || '0';
+            if (text.includes('share')) stats.shares = text.match(/\d+/)?.[0] || '0';
+            if (text.includes('view')) stats.views = text.match(/\d+/)?.[0] || '0';
+        });
+
+        // Ekstrak video dan audio
+        let mp4Urls = [];
+        let mp3Urls = [];
+        let slides = [];
+
+        // Cek slideshow
+        $('.carousel-item[data-data]').each((_, el) => {
+            try {
+                const json = JSON.parse($(el).attr('data-data').replace(/&quot;/g, '"'));
+                json.URL?.forEach(u => slides.push(u));
+            } catch (e) {}
+        });
+
+        // Ekstrak format
+        $('#formatselect option').each((_, el) => {
+            const label = $(el).text().toLowerCase();
+            const raw = $(el).attr('value');
+            if (!raw) return;
+
+            try {
+                const json = JSON.parse(raw.replace(/&quot;/g, '"'));
+                if (label.includes('mp4') && !label.includes('watermark')) {
+                    mp4Urls.push(...json.URL);
+                }
+                if (label.includes('mp3')) {
+                    mp3Urls.push(...json.URL);
+                }
+            } catch (e) {}
+        });
+
+        // Ambil durasi
+        const duration = $('#duration').text().trim() || '-';
 
         return {
-            id: data.id,
-            title: data.title,
-            description: data.title,
-            duration: data.duration,
-            create_time: data.create_time,
-            cover: data.cover,
-            origin_cover: data.origin_cover,
-            play: data.play,
-            wmplay: data.wmplay,
-            hdplay: data.hdplay,
-            music: data.music,
-            author: {
-                id: data.author?.id,
-                unique_id: data.author?.unique_id,
-                nickname: data.author?.nickname,
-                avatar: data.author?.avatar,
-                signature: data.author?.signature,
-                verified: data.author?.verified
-            },
-            stats: {
-                play_count: data.play_count,
-                digg_count: data.digg_count,
-                comment_count: data.comment_count,
-                share_count: data.share_count
+            success: true,
+            source: 'savett',
+            data: {
+                username: username,
+                description: desc,
+                duration: duration,
+                stats: {
+                    likes: stats.likes || '0',
+                    comments: stats.comments || '0',
+                    shares: stats.shares || '0',
+                    views: stats.views || '0'
+                },
+                video_url: mp4Urls[0] || null,
+                video_hd: mp4Urls[1] || null,
+                audio_url: mp3Urls[0] || null,
+                thumbnail: $('img.thumbnail').attr('src') || null,
+                slides: slides
             }
         };
     } catch (error) {
-        throw new Error(`Gagal download dari TikWM: ${error.message}`);
+        console.error('SaveTT error:', error.message);
+        return { success: false, error: error.message };
     }
+}
+
+// ========== [ FUNGSI UTAMA TIKTOK (GABUNGAN) ] ==========
+async function downloadTikTok(url) {
+    // Coba dari NexRay API dulu
+    const nexray = await getTikTokFromNexRay(url);
+    
+    if (nexray.success && nexray.data) {
+        const data = nexray.data;
+        return {
+            success: true,
+            source: 'nexray',
+            data: {
+                id: data.id,
+                username: data.author?.fullname || data.author?.username || '-',
+                nickname: data.author?.username || '-',
+                description: data.title || '-',
+                duration: data.duration || '-',
+                stats: {
+                    likes: data.stats?.likes || '0',
+                    comments: data.stats?.comment || '0',
+                    shares: data.stats?.share || '0',
+                    views: data.stats?.views || '0'
+                },
+                video_url: data.data || null,
+                video_hd: data.hd || null,
+                video_watermark: data.watermark || null,
+                audio_url: data.music_info?.url || null,
+                thumbnail: data.thumbnail || data.cover || null,
+                slides: []
+            }
+        };
+    }
+
+    // Jika NexRay gagal, coba dari SaveTT
+    const savett = await getTikTokFromSaveTT(url);
+    
+    if (savett.success) {
+        return savett;
+    }
+
+    throw new Error('Gagal mengambil data TikTok dari semua sumber');
 }
 
 // ========== [ FUNGSI SEARCH TIKTOK ] ==========
 async function searchTikTok(query, count = 20) {
+    // Untuk search, menggunakan API alternatif
     try {
-        const response = await axios.post(
-            TIKWM_API,
-            `query=${encodeURIComponent(query)}&count=${count}&cursor=0&type=0`,
-            {
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    ...TIKTOK_HEADERS
-                },
-                timeout: 30000
+        const response = await axios.get(`https://api.nexray.web.id/search/tiktok?query=${encodeURIComponent(query)}&count=${count}`, {
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
-        );
+        });
 
-        if (!response.data || response.data.code !== 0) {
-            throw new Error(response.data?.msg || "Gagal melakukan pencarian");
+        if (response.data?.status) {
+            return {
+                success: true,
+                query: query,
+                count: response.data.result?.length || 0,
+                videos: response.data.result?.map(video => ({
+                    id: video.id,
+                    title: video.title,
+                    duration: video.duration,
+                    play_count: video.play_count,
+                    digg_count: video.digg_count,
+                    comment_count: video.comment_count,
+                    share_count: video.share_count,
+                    thumbnail: video.cover,
+                    author: {
+                        unique_id: video.author?.unique_id,
+                        nickname: video.author?.nickname,
+                        avatar: video.author?.avatar
+                    }
+                })) || []
+            };
         }
-
-        const videos = response.data.data?.videos || [];
-
-        return {
-            query: query,
-            count: videos.length,
-            videos: videos.map(video => ({
-                id: video.id,
-                title: video.title,
-                duration: video.duration,
-                play_count: video.play_count,
-                digg_count: video.digg_count,
-                comment_count: video.comment_count,
-                share_count: video.share_count,
-                create_time: video.create_time,
-                cover: video.cover,
-                origin_cover: video.origin_cover,
-                play: video.play,
-                wmplay: video.wmplay,
-                hdplay: video.hdplay,
-                music: video.music,
-                author: {
-                    unique_id: video.author?.unique_id,
-                    nickname: video.author?.nickname,
-                    avatar: video.author?.avatar
-                }
-            }))
-        };
+        throw new Error('Search API gagal');
     } catch (error) {
         throw new Error(`Gagal search TikTok: ${error.message}`);
     }
@@ -363,17 +445,13 @@ app.get("/", (req, res) => {
             youtube: {
                 audio: "/api/v1/youtube/audio?url=YOUTUBE_URL",
                 video: "/api/v1/youtube/video?url=YOUTUBE_URL&resolusi=720",
-                playmp3: "/api/v1/youtube/ytplaymp3?query=SEARCH_QUERY",
-                cdn_status: "/api/v1/youtube/cdn-status"
+                playmp3: "/api/v1/youtube/ytplaymp3?query=SEARCH_QUERY"
             },
             tiktok: {
-                mp3: "/FebryJW/api/v1/tiktok/tiktok-mp3?url=TIKTOK_URL",
-                mp4: "/FebryJW/api/v1/tiktok/tiktok-mp4?url=TIKTOK_URL",
-                nowm: "/FebryJW/api/v1/tiktok/tiktok-nowm?url=TIKTOK_URL",
-                search: "/FebryJW/api/v1/tiktok/tiktok-search?query=QUERY",
-                search_mp3: "/FebryJW/api/v1/tiktok/tiktok-search-mp3?query=QUERY",
-                search_mp4: "/FebryJW/api/v1/tiktok/tiktok-search-mp4?query=QUERY",
-                full: "/FebryJW/api/v1/tiktok/tiktok-mp3-mp4?url=TIKTOK_URL"
+                download: "/FebryJW/api/v1/tiktok/download?url=TIKTOK_URL",
+                audio: "/FebryJW/api/v1/tiktok/audio?url=TIKTOK_URL",
+                video: "/FebryJW/api/v1/tiktok/video?url=TIKTOK_URL",
+                search: "/FebryJW/api/v1/tiktok/search?query=QUERY&count=20"
             }
         },
         timestamp: new Date().toISOString()
@@ -540,50 +618,10 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
     }
 });
 
-// ========== [ ENDPOINT CEK STATUS CDN ] ==========
-app.get("/api/v1/youtube/cdn-status", async (req, res) => {
-    const start = Date.now();
-
-    try {
-        const randomSamples = [];
-
-        for (let i = 0; i < 3; i++) {
-            try {
-                const cdn = await getRandomCDN();
-                randomSamples.push({
-                    index: i + 1,
-                    cdn: cdn
-                });
-            } catch (e) {
-                randomSamples.push({
-                    index: i + 1,
-                    error: e.message
-                });
-            }
-        }
-
-        jsonResponse(res, 200, {
-            status: true,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-            random_cdn_source: RANDOM_CDN_API,
-            samples: randomSamples,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } catch (error) {
-        jsonResponse(res, 500, {
-            status: false,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-            error: error.message,
-            timestamp: new Date().toISOString()
-        });
-    }
-});
-
 // ==================== [ TIKTOK ENDPOINTS ] ====================
 
-// ========== [ ENDPOINT TIKTOK MP3 (AUDIO ONLY) ] ==========
-app.get("/FebryJW/api/v1/tiktok/tiktok-mp3", async (req, res) => {
+// ========== [ ENDPOINT TIKTOK DOWNLOAD (VIDEO + AUDIO LENGKAP) ] ==========
+app.get("/FebryJW/api/v1/tiktok/download", async (req, res) => {
     const start = Date.now();
 
     try {
@@ -598,35 +636,34 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3", async (req, res) => {
             });
         }
 
-        const parsedUrl = extractTikTokUrl(url);
-        if (!parsedUrl) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: "FebryJW 🚀",
-                error: "URL TikTok tidak valid",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const result = await downloadFromTikWM(url);
+        const result = await downloadTikTok(url);
 
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
+            source: result.source,
             result: {
-                id: result.id,
-                title: result.title,
-                duration: result.duration,
-                audio_url: result.music,
-                thumbnail: result.cover,
-                author: result.author,
-                platform: parsedUrl.platform
+                id: result.data.id,
+                username: result.data.username,
+                nickname: result.data.nickname,
+                description: result.data.description,
+                duration: result.data.duration,
+                stats: result.data.stats,
+                video: {
+                    no_watermark: result.data.video_url,
+                    with_watermark: result.data.video_watermark,
+                    hd: result.data.video_hd
+                },
+                audio: result.data.audio_url,
+                thumbnail: result.data.thumbnail,
+                is_slideshow: result.data.slides?.length > 0,
+                slides: result.data.slides || []
             },
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     } catch (error) {
-        console.error("TikTok MP3 Error:", error.message);
+        console.error("TikTok Download Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
             creator: "FebryJW 🚀",
@@ -637,12 +674,12 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp3", async (req, res) => {
     }
 });
 
-// ========== [ ENDPOINT TIKTOK MP4 (VIDEO WITH WATERMARK) ] ==========
-app.get("/FebryJW/api/v1/tiktok/tiktok-mp4", async (req, res) => {
+// ========== [ ENDPOINT TIKTOK VIDEO (MP4) ] ==========
+app.get("/FebryJW/api/v1/tiktok/video", async (req, res) => {
     const start = Date.now();
 
     try {
-        const { url } = req.query;
+        const { url, hd = "false" } = req.query;
 
         if (!url) {
             return jsonResponse(res, 400, {
@@ -653,46 +690,54 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp4", async (req, res) => {
             });
         }
 
-        const parsedUrl = extractTikTokUrl(url);
-        if (!parsedUrl) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: "FebryJW 🚀",
-                error: "URL TikTok tidak valid",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const result = await downloadFromTikWM(url);
-
-        let videoUrl = result.play;
+        const result = await downloadTikTok(url);
+        
+        // Pilih video berdasarkan parameter hd
+        let videoUrl = result.data.video_url;
         let videoQuality = "Standard";
-
-        if (result.hdplay && result.hdplay !== "") {
-            videoUrl = result.hdplay;
+        
+        if (hd === "true" && result.data.video_hd) {
+            videoUrl = result.data.video_hd;
             videoQuality = "HD";
         }
 
+        if (!videoUrl && result.data.slides?.length > 0) {
+            return jsonResponse(res, 200, {
+                status: true,
+                creator: "FebryJW 🚀",
+                type: "slideshow",
+                result: {
+                    username: result.data.username,
+                    description: result.data.description,
+                    slides: result.data.slides,
+                    audio: result.data.audio
+                },
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
+        }
+
+        if (!videoUrl) {
+            throw new Error("Video tidak ditemukan");
+        }
+
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
             result: {
-                id: result.id,
-                title: result.title,
-                description: result.description,
-                duration: result.duration,
+                title: result.data.description?.substring(0, 100) || "TikTok Video",
+                username: result.data.username,
+                duration: result.data.duration,
                 video_url: videoUrl,
                 video_quality: videoQuality,
-                thumbnail: result.origin_cover,
-                author: result.author,
-                stats: result.stats,
-                platform: parsedUrl.platform
+                thumbnail: result.data.thumbnail,
+                stats: result.data.stats
             },
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     } catch (error) {
-        console.error("TikTok MP4 Error:", error.message);
+        console.error("TikTok Video Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
             creator: "FebryJW 🚀",
@@ -703,8 +748,8 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-mp4", async (req, res) => {
     }
 });
 
-// ========== [ ENDPOINT TIKTOK NO WATERMARK (WITHOUT WATERMARK) ] ==========
-app.get("/FebryJW/api/v1/tiktok/tiktok-nowm", async (req, res) => {
+// ========== [ ENDPOINT TIKTOK AUDIO (MP3) ] ==========
+app.get("/FebryJW/api/v1/tiktok/audio", async (req, res) => {
     const start = Date.now();
 
     try {
@@ -719,38 +764,27 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-nowm", async (req, res) => {
             });
         }
 
-        const parsedUrl = extractTikTokUrl(url);
-        if (!parsedUrl) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: "FebryJW 🚀",
-                error: "URL TikTok tidak valid",
-                timestamp: new Date().toISOString()
-            });
-        }
+        const result = await downloadTikTok(url);
 
-        const result = await downloadFromTikWM(url);
+        if (!result.data.audio_url) {
+            throw new Error("Audio tidak ditemukan untuk video ini");
+        }
 
         jsonResponse(res, 200, {
             status: true,
             creator: "FebryJW 🚀",
             result: {
-                id: result.id,
-                title: result.title,
-                description: result.description,
-                duration: result.duration,
-                video_url: result.play,
-                video_hd: result.hdplay || null,
-                thumbnail: result.origin_cover,
-                author: result.author,
-                stats: result.stats,
-                platform: parsedUrl.platform
+                title: result.data.description?.substring(0, 100) || "TikTok Audio",
+                username: result.data.username,
+                duration: result.data.duration,
+                audio_url: result.data.audio_url,
+                thumbnail: result.data.thumbnail
             },
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     } catch (error) {
-        console.error("TikTok NoWM Error:", error.message);
+        console.error("TikTok Audio Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
             creator: "FebryJW 🚀",
@@ -762,7 +796,7 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-nowm", async (req, res) => {
 });
 
 // ========== [ ENDPOINT TIKTOK SEARCH ] ==========
-app.get("/FebryJW/api/v1/tiktok/tiktok-search", async (req, res) => {
+app.get("/FebryJW/api/v1/tiktok/search", async (req, res) => {
     const start = Date.now();
 
     try {
@@ -788,206 +822,6 @@ app.get("/FebryJW/api/v1/tiktok/tiktok-search", async (req, res) => {
         });
     } catch (error) {
         console.error("TikTok Search Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: "FebryJW 🚀",
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    }
-});
-
-// ========== [ ENDPOINT TIKTOK SEARCH MP3 ] ==========
-app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp3", async (req, res) => {
-    const start = Date.now();
-
-    try {
-        const { query, count = 10 } = req.query;
-
-        if (!query) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: "FebryJW 🚀",
-                error: "Parameter 'query' diperlukan",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const searchResult = await searchTikTok(query, parseInt(count));
-
-        const audioResults = searchResult.videos.map(video => ({
-            id: video.id,
-            title: video.title,
-            duration: video.duration,
-            audio_url: video.music || null,
-            thumbnail: video.cover,
-            author: video.author,
-            play_count: video.play_count
-        }));
-
-        jsonResponse(res, 200, {
-            status: true,
-            creator: "FebryJW 🚀",
-            result: {
-                query: query,
-                count: audioResults.length,
-                audios: audioResults
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } catch (error) {
-        console.error("TikTok Search MP3 Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: "FebryJW 🚀",
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    }
-});
-
-// ========== [ ENDPOINT TIKTOK SEARCH MP4 ] ==========
-app.get("/FebryJW/api/v1/tiktok/tiktok-search-mp4", async (req, res) => {
-    const start = Date.now();
-
-    try {
-        const { query, count = 10 } = req.query;
-
-        if (!query) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: "FebryJW 🚀",
-                error: "Parameter 'query' diperlukan",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const searchResult = await searchTikTok(query, parseInt(count));
-
-        const videoResults = searchResult.videos.map(video => {
-            let videoUrl = video.play;
-            let videoQuality = "Standard";
-
-            if (video.hdplay && video.hdplay !== "") {
-                videoUrl = video.hdplay;
-                videoQuality = "HD";
-            }
-
-            return {
-                id: video.id,
-                title: video.title,
-                duration: video.duration,
-                video_url: videoUrl,
-                video_quality: videoQuality,
-                video_wm: video.wmplay,
-                thumbnail: video.origin_cover,
-                author: video.author,
-                stats: {
-                    plays: video.play_count,
-                    likes: video.digg_count,
-                    comments: video.comment_count,
-                    shares: video.share_count
-                }
-            };
-        });
-
-        jsonResponse(res, 200, {
-            status: true,
-            creator: "FebryJW 🚀",
-            result: {
-                query: query,
-                count: videoResults.length,
-                videos: videoResults
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } catch (error) {
-        console.error("TikTok Search MP4 Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: "FebryJW 🚀",
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    }
-});
-
-// ========== [ ENDPOINT TIKTOK MP3 & MP4 (VIDEO + AUDIO) ] ==========
-app.get("/FebryJW/api/v1/tiktok/tiktok-mp3-mp4", async (req, res) => {
-    const start = Date.now();
-
-    try {
-        const { url } = req.query;
-
-        if (!url) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: "FebryJW 🚀",
-                error: "Parameter 'url' diperlukan",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const parsedUrl = extractTikTokUrl(url);
-        if (!parsedUrl) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: "FebryJW 🚀",
-                error: "URL TikTok tidak valid",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const result = await downloadFromTikWM(url);
-
-        let videoUrl = result.play;
-        let videoQuality = "Standard";
-
-        if (result.hdplay && result.hdplay !== "") {
-            videoUrl = result.hdplay;
-            videoQuality = "HD";
-        }
-
-        jsonResponse(res, 200, {
-            status: true,
-            creator: "FebryJW 🚀",
-            result: {
-                id: result.id,
-                title: result.title,
-                description: result.description,
-                duration: result.duration,
-                create_time: result.create_time,
-                thumbnail: result.origin_cover,
-                media: {
-                    video: {
-                        with_watermark: result.wmplay,
-                        no_watermark: result.play,
-                        hd: result.hdplay,
-                        best: {
-                            url: videoUrl,
-                            quality: videoQuality
-                        }
-                    },
-                    audio: {
-                        url: result.music,
-                        title: result.title,
-                        duration: result.duration
-                    }
-                },
-                author: result.author,
-                stats: result.stats,
-                platform: parsedUrl.platform
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } catch (error) {
-        console.error("TikTok MP3 MP4 Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
             creator: "FebryJW 🚀",
