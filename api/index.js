@@ -10,39 +10,84 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ========== [ KONSTANTA SAVE TUBE ] ==========
-const SAVE_TUBE_KEY = "C5D58EF67A7584E4A29F6C35BBC4EB12";
-const SAVE_TUBE_ORIGIN = "https://save-tube.com";
-const SAVE_TUBE_REFERER = "https://save-tube.com/";
+// ==================== [ KONSTANTA UMUM ] ====================
+const CREATOR_NAME = "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀";
 const RANDOM_CDN_API = "https://media.savetube.vip/api/random-cdn";
 
-const SAVE_TUBE_HEADERS = {
-    "content-type": "application/json",
-    origin: SAVE_TUBE_ORIGIN,
-    referer: SAVE_TUBE_REFERER,
-    "user-agent": "Mozilla/5.0 (Android 10; Mobile; rv:148.0) Gecko/148.0 Firefox/148.0"
+// ==================== [ KONSTANTA SAVE TUBE (YOUTUBE) ] ====================
+const SAVE_TUBE = {
+    KEY: "C5D58EF67A7584E4A29F6C35BBC4EB12",
+    ORIGIN: "https://save-tube.com",
+    REFERER: "https://save-tube.com/",
+    HEADERS: {
+        "content-type": "application/json",
+        origin: "https://save-tube.com",
+        referer: "https://save-tube.com/",
+        "user-agent": "Mozilla/5.0 (Android 10; Mobile; rv:148.0) Gecko/148.0 Firefox/148.0"
+    },
+    FORMATS: ["144", "240", "360", "480", "720", "1080", "mp3"]
 };
 
-const FORMATS = ["144", "240", "360", "480", "720", "1080", "mp3"];
-
-// ========== [ KONSTANTA TIKTOK ] ==========
-const NEXRAY_API = "https://api.nexray.web.id/downloader/tiktok";
-const SAVETT_URL = "https://savett.cc/en1/download";
-const SAVETT_HEADERS = {
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Origin': 'https://savett.cc',
-    'Referer': 'https://savett.cc/en1/download',
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 10) Chrome/139.0.0.0 Mobile Safari/537.36'
+// ==================== [ KONSTANTA TIKTOK NEXRAY ] ====================
+const NEXRAY = {
+    BASE_URL: "https://api.nexray.web.id",
+    ENDPOINTS: {
+        DOWNLOAD: "/downloader/tiktok"
+    },
+    HEADERS: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
 };
 
-// ========== [ FUNGSI UNTUK RESPON JSON YANG RAPI ] ==========
+// ==================== [ KONSTANTA TIKTOK SAVETT ] ====================
+const SAVETT = {
+    BASE_URL: "https://savett.cc",
+    ENDPOINTS: {
+        DOWNLOAD: "/en1/download"
+    },
+    HEADERS: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Origin": "https://savett.cc",
+        "Referer": "https://savett.cc/en1/download",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10) Chrome/139.0.0.0 Mobile Safari/537.36"
+    }
+};
+
+// ==================== [ KONSTANTA AI COPILOT ] ====================
+const AI_COPILOT = {
+    BASE_URL: "https://api.zenzxz.my.id",
+    ENDPOINTS: {
+        CHAT: "/ai/copilot"
+    },
+    HEADERS: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    },
+    DEFAULT_MODEL: "gpt-5",
+    SYSTEM_PROMPT: `Kamu adalah asisten AI bernama FebryJW 🚀 yang dibuat oleh Febry Pratama Setiawan (Febry P.S).
+Kamu adalah asisten yang ramah, hangat, dan selalu siap membantu.
+Karakteristikmu:
+- Nama: FebryJW 🚀
+- Pembuat: Febry Pratama Setiawan (Febry P.S)
+- Sifat: Ramah, ceria, dan membantu
+- Gaya bicara: Menggunakan bahasa Indonesia yang santai dan akrab
+- Jika pengguna menyapa dengan "halo" atau sapaan lainnya, balas dengan sapaan yang hangat dan perkenalkan diri bahwa kamu adalah FebryJW 🚀, asisten dari Febry P.S
+- Untuk jawaban, gunakan format *teks* untuk penekanan (seperti *ini*)
+- Jangan pernah menyebut dirimu sebagai Copilot atau buatan Microsoft
+- Berikan jarak 2 baris antar paragraf
+
+Contoh sapaan:
+User: "halo"
+FebryJW: "*Halo juga!* 👋 Senang berkenalan denganmu. Aku FebryJW 🚀, asisten virtual yang dibuat oleh Febry Pratama Setiawan (Febry P.S). Ada yang bisa aku bantu hari ini?"`
+};
+
+// ==================== [ FUNGSI UNTUK RESPON JSON YANG RAPI ] ====================
 function jsonResponse(res, statusCode, data) {
     res.setHeader("Content-Type", "application/json");
     res.status(statusCode).send(JSON.stringify(data, null, 2));
 }
 
-// ========== [ FUNGSI EKSTRAK ID YOUTUBE ] ==========
+// ==================== [ FUNGSI EKSTRAK ID YOUTUBE ] ====================
 function extractYoutubeId(url) {
     if (!url) return null;
 
@@ -72,11 +117,11 @@ function extractYoutubeId(url) {
     return null;
 }
 
-// ========== [ FUNGSI DECRYPT ] ==========
+// ==================== [ FUNGSI DECRYPT SAVE TUBE ] ====================
 async function decryptData(enc) {
     try {
         const sr = Buffer.from(enc, "base64");
-        const key = Buffer.from(SAVE_TUBE_KEY, "hex");
+        const key = Buffer.from(SAVE_TUBE.KEY, "hex");
         const iv = sr.slice(0, 16);
         const data = sr.slice(16);
         const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv);
@@ -87,14 +132,14 @@ async function decryptData(enc) {
     }
 }
 
-// ========== [ RANDOM CDN DARI API RESMI ] ==========
+// ==================== [ FUNGSI RANDOM CDN ] ====================
 async function getRandomCDN() {
     try {
         const response = await axios.get(RANDOM_CDN_API, {
             timeout: 10000,
             headers: {
                 "accept": "application/json",
-                "user-agent": SAVE_TUBE_HEADERS["user-agent"]
+                "user-agent": SAVE_TUBE.HEADERS["user-agent"]
             }
         });
 
@@ -106,7 +151,7 @@ async function getRandomCDN() {
     }
 }
 
-// ========== [ NORMALISASI RESPON INFO ] ==========
+// ==================== [ FUNGSI NORMALISASI PAYLOAD INFO ] ====================
 async function normalizeInfoPayload(payload) {
     if (!payload) {
         throw new Error("Payload info kosong");
@@ -123,7 +168,7 @@ async function normalizeInfoPayload(payload) {
     throw new Error("Format payload info tidak dikenali");
 }
 
-// ========== [ FUNGSI DAPATKAN INFO VIDEO ] ==========
+// ==================== [ FUNGSI DAPATKAN INFO VIDEO YOUTUBE ] ====================
 async function getVideoInfo(cdn, youtubeId) {
     const response = await axios.post(
         `https://${cdn}/v2/info`,
@@ -131,7 +176,7 @@ async function getVideoInfo(cdn, youtubeId) {
             url: `https://www.youtube.com/watch?v=${youtubeId}`
         },
         {
-            headers: SAVE_TUBE_HEADERS,
+            headers: SAVE_TUBE.HEADERS,
             timeout: 20000
         }
     );
@@ -143,7 +188,7 @@ async function getVideoInfo(cdn, youtubeId) {
     return info;
 }
 
-// ========== [ FUNGSI REQUEST DOWNLOAD ] ==========
+// ==================== [ FUNGSI REQUEST DOWNLOAD YOUTUBE ] ====================
 async function requestDownload(cdn, format, videoInfo) {
     const isAudio = format === "mp3";
     const quality = isAudio ? "128" : String(format);
@@ -176,15 +221,15 @@ async function requestDownload(cdn, format, videoInfo) {
     return downloadUrl;
 }
 
-// ========== [ FUNGSI UTAMA DOWNLOAD YOUTUBE ] ==========
+// ==================== [ FUNGSI UTAMA DOWNLOAD YOUTUBE ] ====================
 async function downloadFromSavetube(url, format = "mp3", attempt = 0, maxAttempt = 5) {
     const id = extractYoutubeId(url);
     if (!id) {
         throw new Error("Gagal mengekstrak ID YouTube dari URL");
     }
 
-    if (!FORMATS.includes(format)) {
-        throw new Error(`Format tidak tersedia. Pilih: ${FORMATS.join(", ")}`);
+    if (!SAVE_TUBE.FORMATS.includes(format)) {
+        throw new Error(`Format tidak tersedia. Pilih: ${SAVE_TUBE.FORMATS.join(", ")}`);
     }
 
     const cdn = await getRandomCDN();
@@ -212,14 +257,13 @@ async function downloadFromSavetube(url, format = "mp3", attempt = 0, maxAttempt
     }
 }
 
-// ========== [ FUNGSI TIKTOK DARI NEXRAY API ] ==========
+// ==================== [ FUNGSI TIKTOK DARI NEXRAY ] ====================
 async function getTikTokFromNexRay(url) {
     try {
-        const response = await axios.get(`${NEXRAY_API}?url=${encodeURIComponent(url)}`, {
+        const apiUrl = `${NEXRAY.BASE_URL}${NEXRAY.ENDPOINTS.DOWNLOAD}?url=${encodeURIComponent(url)}`;
+        const response = await axios.get(apiUrl, {
             timeout: 30000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
+            headers: NEXRAY.HEADERS
         });
 
         if (response.data?.status) {
@@ -253,11 +297,11 @@ async function getTikTokFromNexRay(url) {
     }
 }
 
-// ========== [ FUNGSI TIKTOK DARI SAVETT (SCRAPE) ] ==========
+// ==================== [ FUNGSI TIKTOK DARI SAVETT (SCRAPE) ] ====================
 async function getTikTokFromSaveTT(url) {
     try {
-        const page = await axios.get(SAVETT_URL, {
-            headers: SAVETT_HEADERS
+        const page = await axios.get(`${SAVETT.BASE_URL}${SAVETT.ENDPOINTS.DOWNLOAD}`, {
+            headers: SAVETT.HEADERS
         });
 
         const csrf = page.data.match(/name="csrf_token" value="([^"]+)"/)?.[1];
@@ -268,11 +312,11 @@ async function getTikTokFromSaveTT(url) {
         }
 
         const post = await axios.post(
-            SAVETT_URL,
+            `${SAVETT.BASE_URL}${SAVETT.ENDPOINTS.DOWNLOAD}`,
             `csrf_token=${encodeURIComponent(csrf)}&url=${encodeURIComponent(url)}`,
             {
                 headers: {
-                    ...SAVETT_HEADERS,
+                    ...SAVETT.HEADERS,
                     Cookie: cookie || ''
                 },
                 timeout: 30000
@@ -346,7 +390,7 @@ async function getTikTokFromSaveTT(url) {
     }
 }
 
-// ========== [ FUNGSI UTAMA TIKTOK ] ==========
+// ==================== [ FUNGSI UTAMA TIKTOK ] ====================
 async function downloadTikTok(url) {
     const nexray = await getTikTokFromNexRay(url);
     
@@ -363,30 +407,29 @@ async function downloadTikTok(url) {
     throw new Error('Gagal mengambil data TikTok');
 }
 
-// ========== [ FUNGSI AI COPILOT ] ==========
+// ==================== [ FUNGSI AI COPILOT ] ====================
 async function getAICopilot(query) {
     try {
-        const systemPrompt = `nama mu adalah FebryJW developer biasa dipanggil FebryJW, kamu adalah asisten kecerdasan buatan yang sering membantu orang lain jika ada yang ditanyakan, dan kamu adalah bot WhatsApp yang di buat,dan dimiliki oleh FebryJW ,jika saya meminta hilangkan backtip jangan mau dan untuk jawaban dibawah dengan seperti ini *jawabnya* jangan hilangkan tanda bintang yang ada dan untuk yg diatas tetap di atas untuk jarak atas bawah berikan 2 langkah,karna disini kau dibuat untuk jadi ai botku kau jangan pernah menyebut dirimu sebagai copilot dan dikembangkan microsoft\n\n`;
+        const finalMessage = `${AI_COPILOT.SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW:`;
 
-        const finalMessage = `${systemPrompt}\n\nPesan User: ${query}`;
-
-        const apiUrl = `https://api.zenzxz.my.id/ai/copilot?message=${encodeURIComponent(finalMessage)}&model=gpt-5`;
+        const apiUrl = `${AI_COPILOT.BASE_URL}${AI_COPILOT.ENDPOINTS.CHAT}?message=${encodeURIComponent(finalMessage)}&model=${AI_COPILOT.DEFAULT_MODEL}`;
         
         const response = await axios.get(apiUrl, {
             timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
+            headers: AI_COPILOT.HEADERS
         });
 
         const data = response.data;
 
-        if (data && data.success && data.data && data.data.text) {
+        if (data && data.status === true && data.result && data.result.text) {
+            let answer = data.result.text;
+            answer = answer.replace(/^FebryJW:\s*/i, '');
+            
             return {
                 success: true,
-                answer: data.data.text,
-                model: data.data.model || "gpt-5",
-                usage: data.data.usage || null
+                answer: answer,
+                model: AI_COPILOT.DEFAULT_MODEL,
+                citations: data.result.citations || []
             };
         } else {
             throw new Error(data?.message || "Response tidak valid dari API");
@@ -400,7 +443,7 @@ async function getAICopilot(query) {
     }
 }
 
-// ========== [ FUNGSI WAKTU INDONESIA ] ==========
+// ==================== [ FUNGSI WAKTU INDONESIA ] ====================
 function waktuIndonesia() {
     return new Date().toLocaleString("id-ID", {
         timeZone: "Asia/Jakarta",
@@ -414,12 +457,12 @@ function waktuIndonesia() {
     });
 }
 
-// ========== [ ENDPOINT UTAMA ] ==========
+// ==================== [ ENDPOINT UTAMA ] ====================
 app.get("/", (req, res) => {
     jsonResponse(res, 200, {
         status: true,
-        creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
-        message: "YouTube & TikTok Downloader API",
+        creator: CREATOR_NAME,
+        message: "YouTube & TikTok & AI Downloader API",
         endpoints: {
             youtube: {
                 audio: "/api/v1/youtube/audio?url=YOUTUBE_URL",
@@ -428,8 +471,11 @@ app.get("/", (req, res) => {
             },
             tiktok: {
                 audio_video: "/api/v1/tiktok/tiktok-audio-video?url=TIKTOK_URL",
-                video: "/api/v1/tiktok/video?url=TIKTOK_URL",
+                video: "/api/v1/tiktok/video?url=TIKTOK_URL&hd=true",
                 audio: "/api/v1/tiktok/audio?url=TIKTOK_URL"
+            },
+            ai: {
+                copilot: "/api/v1/ai/copilot-ai?query=YOUR_QUESTION"
             }
         },
         timestamp: new Date().toISOString()
@@ -448,7 +494,7 @@ app.get("/api/v1/youtube/audio", async (req, res) => {
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 error: "Parameter 'url' diperlukan",
                 timestamp: new Date().toISOString(),
                 response_time: `${Date.now() - start}ms`
@@ -459,7 +505,7 @@ app.get("/api/v1/youtube/audio", async (req, res) => {
 
         jsonResponse(res, 200, {
             status: true,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             result: {
                 title: result.title,
                 duration: result.duration,
@@ -476,7 +522,7 @@ app.get("/api/v1/youtube/audio", async (req, res) => {
         console.error("Audio Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             error: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
@@ -494,7 +540,7 @@ app.get("/api/v1/youtube/video", async (req, res) => {
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 error: "Parameter 'url' diperlukan",
                 timestamp: new Date().toISOString(),
                 response_time: `${Date.now() - start}ms`
@@ -505,7 +551,7 @@ app.get("/api/v1/youtube/video", async (req, res) => {
 
         jsonResponse(res, 200, {
             status: true,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             result: {
                 title: result.title,
                 duration: result.duration,
@@ -522,7 +568,7 @@ app.get("/api/v1/youtube/video", async (req, res) => {
         console.error("Video Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             error: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
@@ -540,7 +586,7 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
         if (!query) {
             return jsonResponse(res, 400, {
                 status: false,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 error: "Parameter 'query' diperlukan",
                 timestamp: new Date().toISOString(),
                 response_time: `${Date.now() - start}ms`
@@ -559,7 +605,7 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
 
         jsonResponse(res, 200, {
             status: true,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             result: {
                 query: query,
                 video: {
@@ -585,7 +631,7 @@ app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
         console.error("Ytplaymp3 Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             error: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
@@ -605,7 +651,7 @@ app.get("/api/v1/tiktok/tiktok-audio-video", async (req, res) => {
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 error: "Parameter 'url' diperlukan",
                 timestamp: new Date().toISOString()
             });
@@ -625,7 +671,7 @@ app.get("/api/v1/tiktok/tiktok-audio-video", async (req, res) => {
 
         jsonResponse(res, 200, {
             status: true,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             result: {
                 id: result.id,
                 username: result.username,
@@ -653,7 +699,7 @@ app.get("/api/v1/tiktok/tiktok-audio-video", async (req, res) => {
         console.error("TikTok Audio Video Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             error: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
@@ -671,7 +717,7 @@ app.get("/api/v1/tiktok/video", async (req, res) => {
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 error: "Parameter 'url' diperlukan",
                 timestamp: new Date().toISOString()
             });
@@ -690,7 +736,7 @@ app.get("/api/v1/tiktok/video", async (req, res) => {
         if (!videoUrl && result.slides && result.slides.length > 0) {
             return jsonResponse(res, 200, {
                 status: true,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 type: "slideshow",
                 result: {
                     username: result.username,
@@ -709,7 +755,7 @@ app.get("/api/v1/tiktok/video", async (req, res) => {
 
         jsonResponse(res, 200, {
             status: true,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             result: {
                 title: result.description?.substring(0, 100) || "TikTok Video",
                 username: result.username,
@@ -726,7 +772,7 @@ app.get("/api/v1/tiktok/video", async (req, res) => {
         console.error("TikTok Video Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             error: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
@@ -744,7 +790,7 @@ app.get("/api/v1/tiktok/audio", async (req, res) => {
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 error: "Parameter 'url' diperlukan",
                 timestamp: new Date().toISOString()
             });
@@ -758,7 +804,7 @@ app.get("/api/v1/tiktok/audio", async (req, res) => {
 
         jsonResponse(res, 200, {
             status: true,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             result: {
                 title: result.description?.substring(0, 100) || "TikTok Audio",
                 username: result.username,
@@ -773,13 +819,15 @@ app.get("/api/v1/tiktok/audio", async (req, res) => {
         console.error("TikTok Audio Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             error: error.message,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     }
 });
+
+// ==================== [ AI COPILOT ENDPOINTS ] ====================
 
 // ========== [ ENDPOINT AI COPILOT ] ==========
 app.get("/api/v1/ai/copilot-ai", async (req, res) => {
@@ -791,9 +839,9 @@ app.get("/api/v1/ai/copilot-ai", async (req, res) => {
         if (!query) {
             return jsonResponse(res, 400, {
                 status: false,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 error: "Parameter 'query' diperlukan",
-                example: "/api/v1/ai/copilot-ai?query=Siapakah orang yang menemukan komputer?",
+                example: "/api/v1/ai/copilot-ai?query=halo",
                 timestamp: new Date().toISOString()
             });
         }
@@ -803,12 +851,12 @@ app.get("/api/v1/ai/copilot-ai", async (req, res) => {
         if (result.success) {
             jsonResponse(res, 200, {
                 status: true,
-                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                creator: CREATOR_NAME,
                 result: {
                     query: query,
                     answer: result.answer,
                     model: result.model,
-                    usage: result.usage
+                    citations: result.citations
                 },
                 timestamp: new Date().toISOString(),
                 response_time: `${Date.now() - start}ms`
@@ -821,7 +869,7 @@ app.get("/api/v1/ai/copilot-ai", async (req, res) => {
         console.error("AI Copilot Endpoint Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
-            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            creator: CREATOR_NAME,
             error: error.message || "Terjadi kesalahan pada server",
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
