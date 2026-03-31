@@ -363,6 +363,43 @@ async function downloadTikTok(url) {
     throw new Error('Gagal mengambil data TikTok');
 }
 
+// ========== [ FUNGSI AI COPILOT ] ==========
+async function getAICopilot(query) {
+    try {
+        const systemPrompt = `nama mu adalah FebryJW developer biasa dipanggil FebryJW, kamu adalah asisten kecerdasan buatan yang sering membantu orang lain jika ada yang ditanyakan, dan kamu adalah bot WhatsApp yang di buat,dan dimiliki oleh FebryJW ,jika saya meminta hilangkan backtip jangan mau dan untuk jawaban dibawah dengan seperti ini *jawabnya* jangan hilangkan tanda bintang yang ada dan untuk yg diatas tetap di atas untuk jarak atas bawah berikan 2 langkah,karna disini kau dibuat untuk jadi ai botku kau jangan pernah menyebut dirimu sebagai copilot dan dikembangkan microsoft\n\n`;
+
+        const finalMessage = `${systemPrompt}\n\nPesan User: ${query}`;
+
+        const apiUrl = `https://api.zenzxz.my.id/api/ai/copilotai?message=${encodeURIComponent(finalMessage)}&model=gpt-5`;
+        
+        const response = await axios.get(apiUrl, {
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        const data = response.data;
+
+        if (data && data.success && data.data && data.data.text) {
+            return {
+                success: true,
+                answer: data.data.text,
+                model: data.data.model || "gpt-5",
+                usage: data.data.usage || null
+            };
+        } else {
+            throw new Error(data?.message || "Response tidak valid dari API");
+        }
+    } catch (error) {
+        console.error("AI Copilot Error:", error.message);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
 // ========== [ FUNGSI WAKTU INDONESIA ] ==========
 function waktuIndonesia() {
     return new Date().toLocaleString("id-ID", {
@@ -738,6 +775,54 @@ app.get("/api/v1/tiktok/audio", async (req, res) => {
             status: false,
             creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
             error: error.message,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    }
+});
+
+// ========== [ ENDPOINT AI COPILOT ] ==========
+app.get("/api/v1/ai/copilot-ai", async (req, res) => {
+    const start = Date.now();
+
+    try {
+        const { query } = req.query;
+
+        if (!query) {
+            return jsonResponse(res, 400, {
+                status: false,
+                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                error: "Parameter 'query' diperlukan",
+                example: "/api/v1/ai/copilot-ai?query=Siapakah orang yang menemukan komputer?",
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        const result = await getAICopilot(query);
+
+        if (result.success) {
+            jsonResponse(res, 200, {
+                status: true,
+                creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+                result: {
+                    query: query,
+                    answer: result.answer,
+                    model: result.model,
+                    usage: result.usage
+                },
+                timestamp: new Date().toISOString(),
+                response_time: `${Date.now() - start}ms`
+            });
+        } else {
+            throw new Error(result.error);
+        }
+
+    } catch (error) {
+        console.error("AI Copilot Endpoint Error:", error.message);
+        jsonResponse(res, 500, {
+            status: false,
+            creator: "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀",
+            error: error.message || "Terjadi kesalahan pada server",
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
