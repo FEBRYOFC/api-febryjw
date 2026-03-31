@@ -10,11 +10,12 @@
   "author": "FebryJW",
   "license": "MIT",
   "dependencies": {
-    "axios": "^1.6.8",
-    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "cheerio": "latest",
     "cors": "^2.8.5",
-    "cheerio": "^1.0.0-rc.12",
-    "yt-search": "^2.10.4"
+    "crypto": "^1.0.1",
+    "express": "^4.18.2",
+    "yt-search": "^2.10.3"
   },
   "engines": {
     "node": "24.x"
