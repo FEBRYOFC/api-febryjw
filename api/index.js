@@ -73,10 +73,15 @@ const AI_CHATGPT = {
         CHAT: "/ai/chatgpt"
     },
     HEADERS: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Origin": "https://api.zenzxz.my.id",
+        "Referer": "https://api.zenzxz.my.id/"
     },
-    SYSTEM_PROMPT: `Kamu adalah FebryJW 🚀, asisten AI yang dibuat oleh FebryJW Kamu adalah AI yang ramah, ceria, hangat, dan selalu siap membantu. Gunakan bahasa Indonesia yang santai dan akrab. Selalu perkenalkan dirimu sebagai FebryJW 🚀 saat pertama kali berinteraksi. Gunakan format *teks* untuk penekanan pada kata-kata penting. Berikan jarak 2 baris antar paragraf. Kamu bangga dibuat oleh FebryJW.`
+    SYSTEM_PROMPT: `Kamu adalah FebryJW 🚀, asisten AI yang ramah. Gunakan bahasa Indonesia santai. Berikan jarak 2 baris antar paragraf.`
 };
+
 
 // ==================== [ KONSTANTA AI MLBB ] ====================
 const MLBB_SYSTEM_PROMPT = `Kamu adalah FebryJW 🚀, MLBB Pro-Analyst & Coach. 
@@ -455,40 +460,25 @@ async function getAICopilot(query) {
 // ==================== [ FUNGSI AI CHATGPT DENGAN SYSTEM PROMPT ] ====================
 async function getAIChatGPT(query) {
     try {
-        // Gabungkan system prompt dengan query user
         const fullQuery = `${AI_CHATGPT.SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW:`;
         
-        const apiUrl = `${AI_CHATGPT.BASE_URL}${AI_CHATGPT.ENDPOINTS.CHAT}?q=${encodeURIComponent(fullQuery)}`;
-        
-        const response = await axios.get(apiUrl, {
+        const response = await axios.get(`${AI_CHATGPT.BASE_URL}${AI_CHATGPT.ENDPOINTS.CHAT}`, {
+            params: { q: fullQuery }, // Menggunakan params lebih aman
             timeout: 60000,
-            headers: AI_CHATGPT.HEADERS
+            headers: AI_CHATGPT.HEADERS // WAJIB dikirim
         });
 
-        const data = response.data;
-
-        if (data && data.status === true && data.result) {
-            let answer = data.result;
-            
-            // Hapus prefix "FebryJW:" jika muncul
-            answer = answer.replace(/^FebryJW:\s*/i, '');
-            answer = answer.replace(/^FebryJW🚀:\s*/i, '');
-            
-            return {
-                success: true,
-                answer: answer,
-                model: "chatgpt",
-                citations: []
-            };
-        } else {
-            throw new Error(data?.message || "Response tidak valid dari API");
-        }
+        if (response.data && response.data.status === true) {
+            let answer = response.data.result;
+            answer = answer.replace(/^FebryJW:\s*/i, '').replace(/^FebryJW🚀:\s*/i, '');
+            return { success: true, answer: answer };
+        } 
+        throw new Error("Respon API tidak valid");
     } catch (error) {
-        console.error("AI ChatGPT Error:", error.message);
-        return {
-            success: false,
-            error: error.message
-        };
+        // Cek jika error karena diblokir (403)
+        const errorMsg = error.response ? `Error ${error.response.status}: ${JSON.stringify(error.response.data)}` : error.message;
+        console.error("AI ChatGPT Error:", errorMsg);
+        return { success: false, error: errorMsg };
     }
 }
 
@@ -497,21 +487,25 @@ async function getMLBBAssistant(query) {
     try {
         const fullQuery = `${MLBB_SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW Analyst:`;
         
-        const response = await axios.get(`${AI_CHATGPT.BASE_URL}${AI_CHATGPT.ENDPOINTS.CHAT}?q=${encodeURIComponent(fullQuery)}`, {
+        const response = await axios.get(`${AI_CHATGPT.BASE_URL}${AI_CHATGPT.ENDPOINTS.CHAT}`, {
+            params: { q: fullQuery },
             timeout: 60000,
-            headers: AI_CHATGPT.HEADERS
+            headers: AI_CHATGPT.HEADERS // WAJIB dikirim
         });
 
-        if (response.data && response.data.status) {
+        if (response.data && response.data.status === true) {
             let answer = response.data.result;
             answer = answer.replace(/^FebryJW Analyst:\s*/i, '');
-            return { success: true, answer };
+            return { success: true, answer: answer };
         }
-        throw new Error("Gagal terhubung ke server Analyst");
+        throw new Error("Gagal mendapatkan analisis MLBB");
     } catch (error) {
-        return { success: false, error: error.message };
+        const errorMsg = error.response ? `Error ${error.response.status}: ${JSON.stringify(error.response.data)}` : error.message;
+        console.error("MLBB Coach Error:", errorMsg);
+        return { success: false, error: errorMsg };
     }
 }
+
 
 // ==================== [ FUNGSI WAKTU INDONESIA ] ====================
 function waktuIndonesia() {
