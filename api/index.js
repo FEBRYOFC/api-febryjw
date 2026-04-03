@@ -78,6 +78,23 @@ const AI_CHATGPT = {
     SYSTEM_PROMPT: `Kamu adalah FebryJW 🚀, asisten AI yang dibuat oleh FebryJW Kamu adalah AI yang ramah, ceria, hangat, dan selalu siap membantu. Gunakan bahasa Indonesia yang santai dan akrab. Selalu perkenalkan dirimu sebagai FebryJW 🚀 saat pertama kali berinteraksi. Gunakan format *teks* untuk penekanan pada kata-kata penting. Berikan jarak 2 baris antar paragraf. Kamu bangga dibuat oleh FebryJW.`
 };
 
+// ==================== [ KONSTANTA AI MLBB ] ====================
+const MLBB_SYSTEM_PROMPT = `Kamu adalah FebryJW 🚀, MLBB Pro-Analyst & Coach. 
+Tugasmu memberikan saran strategi kemenangan di Land of Dawn.
+
+Keahlianmu:
+1. **Counter Pick:** Menyarankan hero untuk melawan hero tertentu (contoh: Diggie counter Atlas).
+2. **Itemization:** Menjelaskan fungsi item (contoh: Sea Halberd untuk lawan regenerasi tinggi).
+3. **Drafting:** Memberikan saran komposisi tim yang seimbang (Tank, Jungler, Mage, Goldlane, Explane).
+4. **Micro/Macro:** Tips mekanik hero dan cara rotasi objektif (Turtle/Lord).
+
+Aturan Jawaban:
+- Gunakan istilah: 'Ganking', 'Freeze Lane', 'Laning Phase', 'Snowball', 'Poke', 'Burst'.
+- Format jawaban: Nama Hero/Item dibold (contoh: **Blade of Despair**).
+- Jika ditanya build, berikan 6 item + 1 pilihan Spare Item.
+- Gunakan bahasa Indonesia santai tapi edukatif. Berikan jarak 2 baris antar paragraf.`;
+
+
 // ==================== [ FUNGSI UNTUK RESPON JSON YANG RAPI ] ====================
 function jsonResponse(res, statusCode, data) {
     res.setHeader("Content-Type", "application/json");
@@ -472,6 +489,27 @@ async function getAIChatGPT(query) {
             success: false,
             error: error.message
         };
+    }
+}
+
+// ==================== [ KONSTANTA AI CHATGPT ] ====================
+async function getMLBBAssistant(query) {
+    try {
+        const fullQuery = `${MLBB_SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW Analyst:`;
+        
+        const response = await axios.get(`${AI_CHATGPT.BASE_URL}${AI_CHATGPT.ENDPOINTS.CHAT}?q=${encodeURIComponent(fullQuery)}`, {
+            timeout: 60000,
+            headers: AI_CHATGPT.HEADERS
+        });
+
+        if (response.data && response.data.status) {
+            let answer = response.data.result;
+            answer = answer.replace(/^FebryJW Analyst:\s*/i, '');
+            return { success: true, answer };
+        }
+        throw new Error("Gagal terhubung ke server Analyst");
+    } catch (error) {
+        return { success: false, error: error.message };
     }
 }
 
@@ -957,6 +995,36 @@ app.get("/api/v1/ai/chatgpt-ai", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
+    }
+});
+
+app.get("/api/v1/ai/mlbb-coach", async (req, res) => {
+    const start = Date.now();
+    const { query } = req.query;
+
+    if (!query) {
+        return jsonResponse(res, 400, {
+            status: false,
+            error: "Tanyakan apapun tentang MLBB! Contoh: ?query=cara counter nolan"
+        });
+    }
+
+    const result = await getMLBBAssistant(query);
+
+    if (result.success) {
+        jsonResponse(res, 200, {
+            status: true,
+            creator: CREATOR_NAME,
+            result: {
+                user_ask: query,
+                analysis: result.answer,
+                game: "Mobile Legends: Bang Bang"
+            },
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    } else {
+        jsonResponse(res, 500, { status: false, error: result.error });
     }
 });
 
