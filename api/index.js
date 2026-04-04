@@ -99,6 +99,21 @@ Aturan Jawaban:
 - Jika ditanya build, berikan 6 item + 1 pilihan Spare Item.
 - Gunakan bahasa Indonesia santai tapi edukatif. Berikan jarak 2 baris antar paragraf.`;
 
+// ==================== [ KONSTANTA AI GEMINI ] ====================
+const AI_GEMINI = {
+    BASE_URL: "https://api.nexray.web.id",
+    ENDPOINTS: {
+        CHAT: "/ai/gemini"
+    },
+    HEADERS: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    },
+    SYSTEM_PROMPT: `Kamu adalah FebryJW 🚀. 
+    Kamu adalah asisten AI yang ramah, cerdas, dan santai. 
+    Selalu gunakan bahasa Indonesia yang akrab. 
+    Berikan jarak 2 baris antar paragraf agar rapi. 
+    Gunakan format *teks* untuk penekanan.`
+};
 
 // ==================== [ FUNGSI UNTUK RESPON JSON YANG RAPI ] ====================
 function jsonResponse(res, statusCode, data) {
@@ -506,6 +521,38 @@ async function getMLBBAssistant(query) {
     }
 }
 
+async function getAIGemini(query) {
+    try {
+        // Gabungkan System Prompt dengan Pertanyaan User
+        const fullText = `${AI_GEMINI.SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW:`;
+        
+        const response = await axios.get(`${AI_GEMINI.BASE_URL}${AI_GEMINI.ENDPOINTS.CHAT}`, {
+            params: { text: fullText },
+            timeout: 60000,
+            headers: AI_GEMINI.HEADERS
+        });
+
+        // Hanya ambil 'result' jika status true
+        if (response.data && response.data.status === true) {
+            let answer = response.data.result;
+            
+            // Bersihkan sisa-sisa prefix jika AI menulis ulang nama asisten
+            answer = answer.replace(/^FebryJW:\s*/i, '');
+            
+            return {
+                success: true,
+                answer: answer
+            };
+        }
+        throw new Error("Gagal mendapatkan respon AI");
+    } catch (error) {
+        console.error("AI Gemini Error:", error.message);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
 
 // ==================== [ FUNGSI WAKTU INDONESIA ] ====================
 function waktuIndonesia() {
@@ -1021,5 +1068,43 @@ app.get("/api/v1/ai/mlbb-coach", async (req, res) => {
         jsonResponse(res, 500, { status: false, error: result.error });
     }
 });
+
+// ========== [ ENDPOINT AI GEMINI ] ==========
+app.get("/api/v1/ai/ai-gemini", async (req, res) => {
+    const start = Date.now();
+    const { query } = req.query;
+
+    if (!query) {
+        return jsonResponse(res, 400, {
+            status: false,
+            creator: CREATOR_NAME,
+            error: "Parameter 'query' diperlukan."
+        });
+    }
+
+    const result = await getAIGemini(query);
+
+    if (result.success) {
+        // Response bersih tanpa menyebutkan source nexray
+        jsonResponse(res, 200, {
+            status: true,
+            creator: CREATOR_NAME,
+            result: {
+                query: query,
+                answer: result.answer
+            },
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    } else {
+        jsonResponse(res, 500, {
+            status: false,
+            creator: CREATOR_NAME,
+            error: "Maaf, asisten sedang beristirahat. Coba lagi nanti.",
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 
 module.exports = app;
