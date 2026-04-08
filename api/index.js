@@ -12,20 +12,29 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ==================== [ DATABASE GAMES ] ====================
-function getSusunKataData() {
-    try {
-        const susunKataPath = path.join(process.cwd(), 'database', 'susunkata.json');
-        if (fs.existsSync(susunKataPath)) {
-            return JSON.parse(fs.readFileSync(susunKataPath, 'utf8'));
-        }
-        return [];
-    } catch (e) {
-        console.error("Error reading database:", e);
-        return [];
-    }
-}
-
+// ==================== [ DATA GAMES LANGSUNG ] ====================
+const DATA_GAMES_SUSUNKATA = [
+  {"soal": "U-B-K-U", "jawaban": "BUKU", "tipe": "Benda"},
+  {"soal": "M-U-R-A-J", "jawaban": "JARUM", "tipe": "Benda"},
+  {"soal": "G-N-A-G-J-U", "jawaban": "JAGUNG", "tipe": "Tumbuhan"},
+  {"soal": "U-R-G-U", "jawaban": "GURU", "tipe": "Pekerjaan"},
+  {"soal": "O-N-L-E-M", "jawaban": "MELON", "tipe": "Buah"},
+  {"soal": "R-G-U-N-K-A", "jawaban": "KARUNG", "tipe": "Benda"},
+  {"soal": "N-U-B-S-A", "jawaban": "SABUN", "tipe": "Benda"},
+  {"soal": "T-A-R-S-E-K", "jawaban": "KERTAS", "tipe": "Benda"},
+  {"soal": "R-O-M-O-T", "jawaban": "MOTOR", "tipe": "Benda"},
+  {"soal": "M-P-A-S-N-A", "jawaban": "SAMPAN", "tipe": "Benda"},
+  {"soal": "D-U-R-G-A-A", "jawaban": "GARUDA", "tipe": "Hewan"},
+  {"soal": "D-O-O-M-O-K", "jawaban": "KOMODO", "tipe": "Hewan"},
+  {"soal": "M-A-R-H-U-I-A", "jawaban": "HARIMAU", "tipe": "Hewan"},
+  {"soal": "T-E-R-O-K-D", "jawaban": "DOKTER", "tipe": "Pekerjaan"},
+  {"soal": "S-I-L-O-P-I", "jawaban": "POLISI", "tipe": "Pekerjaan"},
+  {"soal": "T-I-A-N-E-P", "jawaban": "PETANI", "tipe": "Pekerjaan"},
+  {"soal": "D-I-S-O-E-N-A-I-N", "jawaban": "INDONESIA", "tipe": "Negara"},
+  {"soal": "S-I-T-E-L-E-I-V", "jawaban": "TELEVISI", "tipe": "Benda"},
+  {"soal": "G-L-N-U-K-A-N-G", "jawaban": "ANGKLUNG", "tipe": "Benda"},
+  {"soal": "A-N-I-P-O", "jawaban": "PIANO", "tipe": "Benda"}
+];
 
 // ==================== [ KONSTANTA UMUM ] ====================
 const CREATOR_NAME = "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀";
@@ -1126,37 +1135,23 @@ app.get("/api/v1/ai/ai-gemini", async (req, res) => {
 // ========== [ ENDPOINT GAMES SUSUN KATA ] ==========
 app.get("/api/v1/games/susun-kata", (req, res) => {
     const start = Date.now();
-    try {
-        const data = getSusunKataData(); // Panggil fungsi pembacaan
-        
-        if (data.length === 0) {
-            return jsonResponse(res, 404, {
-                status: false,
-                error: "Database soal tidak ditemukan atau kosong."
-            });
-        }
+    
+    // Langsung ambil dari variabel di atas
+    const randomIndex = Math.floor(Math.random() * DATA_GAMES_SUSUNKATA.length);
+    const selectedGame = DATA_GAMES_SUSUNKATA[randomIndex];
 
-        const randomIndex = Math.floor(Math.random() * data.length);
-        const selectedGame = data[randomIndex];
-
-        jsonResponse(res, 200, {
-            status: true,
-            creator: CREATOR_NAME,
-            result: {
-                soal: selectedGame.soal,
-                tipe: selectedGame.tipe,
-                jawaban: selectedGame.jawaban
-            },
-            total_database: data.length,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } catch (error) {
-        jsonResponse(res, 500, {
-            status: false,
-            error: "Terjadi kesalahan internal pada server."
-        });
-    }
+    jsonResponse(res, 200, {
+        status: true,
+        creator: CREATOR_NAME,
+        result: {
+            soal: selectedGame.soal,
+            tipe: selectedGame.tipe,
+            jawaban: selectedGame.jawaban
+        },
+        total_database: DATA_GAMES_SUSUNKATA.length,
+        timestamp: new Date().toISOString(),
+        response_time: `${Date.now() - start}ms`
+    });
 });
 
 module.exports = app;
