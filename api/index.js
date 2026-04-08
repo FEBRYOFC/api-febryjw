@@ -1113,7 +1113,7 @@ app.get("/api/v1/ai/ai-gemini", async (req, res) => {
 });
 
 // ========== [ ENDPOINT GAMES SUSUN KATA ] ==========
-app.get("/api/v1/games/susunkata", (req, res) => {
+app.get("/api/v1/games/susun-kata", (req, res) => {
     const start = Date.now();
     try {
         const randomIndex = Math.floor(Math.random() * DATA_SUSUNKATA.length);
