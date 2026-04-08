@@ -13,8 +13,19 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ==================== [ DATABASE GAMES ] ====================
-const susunKataPath = path.join(process.cwd(), 'database', 'susunkata.json');
-const DATA_SUSUNKATA = JSON.parse(fs.readFileSync(susunKataPath, 'utf8'));
+function getSusunKataData() {
+    try {
+        const susunKataPath = path.join(process.cwd(), 'database', 'susunkata.json');
+        if (fs.existsSync(susunKataPath)) {
+            return JSON.parse(fs.readFileSync(susunKataPath, 'utf8'));
+        }
+        return [];
+    } catch (e) {
+        console.error("Error reading database:", e);
+        return [];
+    }
+}
+
 
 // ==================== [ KONSTANTA UMUM ] ====================
 const CREATOR_NAME = "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀";
@@ -176,7 +187,7 @@ async function decryptData(enc) {
 async function getRandomCDN() {
     try {
         const response = await axios.get(RANDOM_CDN_API, {
-            timeout: 10000,
+            timeout: 60000,
             headers: {
                 "accept": "application/json",
                 "user-agent": SAVE_TUBE.HEADERS["user-agent"]
@@ -217,7 +228,7 @@ async function getVideoInfo(cdn, youtubeId) {
         },
         {
             headers: SAVE_TUBE.HEADERS,
-            timeout: 20000
+            timeout: 60000
         }
     );
 
@@ -249,7 +260,7 @@ async function requestDownload(cdn, format, videoInfo) {
             headers: {
                 "content-type": "application/json"
             },
-            timeout: 25000
+            timeout: 60000
         }
     );
 
@@ -1116,8 +1127,17 @@ app.get("/api/v1/ai/ai-gemini", async (req, res) => {
 app.get("/api/v1/games/susun-kata", (req, res) => {
     const start = Date.now();
     try {
-        const randomIndex = Math.floor(Math.random() * DATA_SUSUNKATA.length);
-        const selectedGame = DATA_SUSUNKATA[randomIndex];
+        const data = getSusunKataData(); // Panggil fungsi pembacaan
+        
+        if (data.length === 0) {
+            return jsonResponse(res, 404, {
+                status: false,
+                error: "Database soal tidak ditemukan atau kosong."
+            });
+        }
+
+        const randomIndex = Math.floor(Math.random() * data.length);
+        const selectedGame = data[randomIndex];
 
         jsonResponse(res, 200, {
             status: true,
@@ -1127,14 +1147,14 @@ app.get("/api/v1/games/susun-kata", (req, res) => {
                 tipe: selectedGame.tipe,
                 jawaban: selectedGame.jawaban
             },
-            total_database: DATA_SUSUNKATA.length,
+            total_database: data.length,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     } catch (error) {
         jsonResponse(res, 500, {
             status: false,
-            error: "Gagal mengambil data soal."
+            error: "Terjadi kesalahan internal pada server."
         });
     }
 });
