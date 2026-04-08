@@ -4,11 +4,17 @@ const axios = require("axios");
 const crypto = require("crypto");
 const yts = require("yt-search");
 const cheerio = require("cheerio");
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ==================== [ DATABASE GAMES ] ====================
+const susunKataPath = path.join(process.cwd(), 'database', 'susunkata.json');
+const DATA_SUSUNKATA = JSON.parse(fs.readFileSync(susunKataPath, 'utf8'));
 
 // ==================== [ KONSTANTA UMUM ] ====================
 const CREATOR_NAME = "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀";
@@ -1106,5 +1112,31 @@ app.get("/api/v1/ai/ai-gemini", async (req, res) => {
     }
 });
 
+// ========== [ ENDPOINT GAMES SUSUN KATA ] ==========
+app.get("/api/v1/games/susunkata", (req, res) => {
+    const start = Date.now();
+    try {
+        const randomIndex = Math.floor(Math.random() * DATA_SUSUNKATA.length);
+        const selectedGame = DATA_SUSUNKATA[randomIndex];
+
+        jsonResponse(res, 200, {
+            status: true,
+            creator: CREATOR_NAME,
+            result: {
+                soal: selectedGame.soal,
+                tipe: selectedGame.tipe,
+                jawaban: selectedGame.jawaban
+            },
+            total_database: DATA_SUSUNKATA.length,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    } catch (error) {
+        jsonResponse(res, 500, {
+            status: false,
+            error: "Gagal mengambil data soal."
+        });
+    }
+});
 
 module.exports = app;
