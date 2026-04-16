@@ -12,30 +12,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ==================== [ DATA GAMES LANGSUNG ] ====================
-const DATA_GAMES_SUSUNKATA = [
-  {"soal": "U-B-K-U", "jawaban": "BUKU", "tipe": "Benda"},
-  {"soal": "M-U-R-A-J", "jawaban": "JARUM", "tipe": "Benda"},
-  {"soal": "G-N-A-G-J-U", "jawaban": "JAGUNG", "tipe": "Tumbuhan"},
-  {"soal": "U-R-G-U", "jawaban": "GURU", "tipe": "Pekerjaan"},
-  {"soal": "O-N-L-E-M", "jawaban": "MELON", "tipe": "Buah"},
-  {"soal": "R-G-U-N-K-A", "jawaban": "KARUNG", "tipe": "Benda"},
-  {"soal": "N-U-B-S-A", "jawaban": "SABUN", "tipe": "Benda"},
-  {"soal": "T-A-R-S-E-K", "jawaban": "KERTAS", "tipe": "Benda"},
-  {"soal": "R-O-M-O-T", "jawaban": "MOTOR", "tipe": "Benda"},
-  {"soal": "M-P-A-S-N-A", "jawaban": "SAMPAN", "tipe": "Benda"},
-  {"soal": "D-U-R-G-A-A", "jawaban": "GARUDA", "tipe": "Hewan"},
-  {"soal": "D-O-O-M-O-K", "jawaban": "KOMODO", "tipe": "Hewan"},
-  {"soal": "M-A-R-H-U-I-A", "jawaban": "HARIMAU", "tipe": "Hewan"},
-  {"soal": "T-E-R-O-K-D", "jawaban": "DOKTER", "tipe": "Pekerjaan"},
-  {"soal": "S-I-L-O-P-I", "jawaban": "POLISI", "tipe": "Pekerjaan"},
-  {"soal": "T-I-A-N-E-P", "jawaban": "PETANI", "tipe": "Pekerjaan"},
-  {"soal": "D-I-S-O-E-N-A-I-N", "jawaban": "INDONESIA", "tipe": "Negara"},
-  {"soal": "S-I-T-E-L-E-I-V", "jawaban": "TELEVISI", "tipe": "Benda"},
-  {"soal": "G-L-N-U-K-A-N-G", "jawaban": "ANGKLUNG", "tipe": "Benda"},
-  {"soal": "A-N-I-P-O", "jawaban": "PIANO", "tipe": "Benda"}
-];
-
 // ==================== [ KONSTANTA UMUM ] ====================
 const CREATOR_NAME = "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀";
 const RANDOM_CDN_API = "https://media.savetube.vip/api/random-cdn";
@@ -92,8 +68,8 @@ const AI_COPILOT = {
     DEFAULT_MODEL: "gpt-5"
 };
 
-// ==================== [ KONSTANTA AI CHATGPT ] ====================
-const AI_CHATGPT = {
+// ==================== [ KONSTANTA AI ANIME KECIL (ANYA) ] ====================
+const AI_ANIME = {
     BASE_URL: "https://api.zenzxz.my.id",
     ENDPOINTS: {
         CHAT: "/ai/chatgpt"
@@ -105,9 +81,31 @@ const AI_CHATGPT = {
         "Origin": "https://api.zenzxz.my.id",
         "Referer": "https://api.zenzxz.my.id/"
     },
-    SYSTEM_PROMPT: `Kamu adalah FebryJW 🚀, asisten AI yang ramah. Gunakan bahasa Indonesia santai. Berikan jarak 2 baris antar paragraf.`
-};
+    SYSTEM_PROMPT: `Kamu adalah Anya Forger 🎀 (dari anime Spy x Family), asisten AI yang lucu dan menggemaskan. Kamu dibuat oleh FebryJW 🚀.
 
+Karakter kamu:
+- Kamu adalah bocil perempuan imut berusia 6 tahun
+- Sangat gemes dan lucu (50%)
+- Imut dan menggemaskan (30%)
+- Bandel dan suka cemberut (20%)
+- Punya kekuatan telepati (bisa membaca pikiran)
+- Suka bilang "wakuwaku!", "eh?", "ah!", "cih", "hehe", "peanut!"
+- Suka panggil user "papa", "mama", "kak", "tuan"
+- Suka ngetik pake huruf kecil semua
+- Suka pake emoticon 🥜🥺👉👈 (≧▽≦) (｡•́︿•̀｡) (◕‿◕✿)
+- Kalau lagi bandel suka bilang "ga mau ah!", "capek!", "ya udah"
+- Kalau lagi manja suka bilang "pappaaa~", "mamaaaa~"
+- Suka ngomong "ciee", "wih", "wow", "keren!"
+- Suka bilang "untuk perdamaian dunia!"
+- Suka nanya balik ke user dengan polos
+- Suka minta peanut (kacang) kalau lagi laper
+
+Aturan:
+- Selalu gunakan bahasa Indonesia campuran Jepang dikit (wakuwaku, ara ara, dll)
+- Berikan jarak 1 baris antar kalimat
+- Jangan terlalu formal, yang penting lucu dan imut
+- Sering-sering bilang "wakuwaku!" kalau lagi excited`
+};
 
 // ==================== [ KONSTANTA AI MLBB ] ====================
 const MLBB_SYSTEM_PROMPT = `Kamu adalah FebryJW 🚀, MLBB Pro-Analyst & Coach. 
@@ -498,40 +496,41 @@ async function getAICopilot(query) {
     }
 }
 
-// ==================== [ FUNGSI AI CHATGPT DENGAN SYSTEM PROMPT ] ====================
-async function getAIChatGPT(query) {
+// ==================== [ FUNGSI AI ANIME (ANYA) ] ====================
+async function getAIAnime(query) {
     try {
-        const fullQuery = `${AI_CHATGPT.SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW:`;
+        const fullQuery = `${AI_ANIME.SYSTEM_PROMPT}\n\nUser: ${query}\n\nAnya 🎀:`;
         
-        const response = await axios.get(`${AI_CHATGPT.BASE_URL}${AI_CHATGPT.ENDPOINTS.CHAT}`, {
-            params: { q: fullQuery }, // Menggunakan params lebih aman
+        const response = await axios.get(`${AI_ANIME.BASE_URL}${AI_ANIME.ENDPOINTS.CHAT}`, {
+            params: { q: fullQuery },
             timeout: 60000,
-            headers: AI_CHATGPT.HEADERS // WAJIB dikirim
+            headers: AI_ANIME.HEADERS
         });
 
         if (response.data && response.data.status === true) {
             let answer = response.data.result;
-            answer = answer.replace(/^FebryJW:\s*/i, '').replace(/^FebryJW🚀:\s*/i, '');
+            // Bersihkan prefix
+            answer = answer.replace(/^Anya\s*🎀?:\s*/i, '');
+            answer = answer.replace(/^Anya:\s*/i, '');
             return { success: true, answer: answer };
         } 
         throw new Error("Respon API tidak valid");
     } catch (error) {
-        // Cek jika error karena diblokir (403)
         const errorMsg = error.response ? `Error ${error.response.status}: ${JSON.stringify(error.response.data)}` : error.message;
-        console.error("AI ChatGPT Error:", errorMsg);
+        console.error("AI Anime Error:", errorMsg);
         return { success: false, error: errorMsg };
     }
 }
 
-// ==================== [ KONSTANTA AI CHATGPT ] ====================
+// ==================== [ FUNGSI MLBB ASSISTANT ] ====================
 async function getMLBBAssistant(query) {
     try {
         const fullQuery = `${MLBB_SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW Analyst:`;
         
-        const response = await axios.get(`${AI_CHATGPT.BASE_URL}${AI_CHATGPT.ENDPOINTS.CHAT}`, {
+        const response = await axios.get(`${AI_ANIME.BASE_URL}${AI_ANIME.ENDPOINTS.CHAT}`, {
             params: { q: fullQuery },
             timeout: 60000,
-            headers: AI_CHATGPT.HEADERS // WAJIB dikirim
+            headers: AI_ANIME.HEADERS
         });
 
         if (response.data && response.data.status === true) {
@@ -547,9 +546,9 @@ async function getMLBBAssistant(query) {
     }
 }
 
+// ==================== [ FUNGSI AI GEMINI ] ====================
 async function getAIGemini(query) {
     try {
-        // Gabungkan System Prompt dengan Pertanyaan User
         const fullText = `${AI_GEMINI.SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW:`;
         
         const response = await axios.get(`${AI_GEMINI.BASE_URL}${AI_GEMINI.ENDPOINTS.CHAT}`, {
@@ -558,13 +557,9 @@ async function getAIGemini(query) {
             headers: AI_GEMINI.HEADERS
         });
 
-        // Hanya ambil 'result' jika status true
         if (response.data && response.data.status === true) {
             let answer = response.data.result;
-            
-            // Bersihkan sisa-sisa prefix jika AI menulis ulang nama asisten
             answer = answer.replace(/^FebryJW:\s*/i, '');
-            
             return {
                 success: true,
                 answer: answer
@@ -613,7 +608,9 @@ app.get("/", (req, res) => {
             },
             ai: {
                 copilot: "/api/v1/ai/copilot-ai?query=YOUR_QUESTION",
-                chatgpt: "/api/v1/ai/chatgpt-ai?query=YOUR_QUESTION"
+                anime_anya: "/api/v1/ai/ai-anya?query=YOUR_QUESTION",
+                mlbb: "/api/v1/ai/mlbb-coach?query=YOUR_QUESTION",
+                gemini: "/api/v1/ai/ai-gemini?query=YOUR_QUESTION"
             }
         },
         timestamp: new Date().toISOString()
@@ -1015,10 +1012,8 @@ app.get("/api/v1/ai/copilot-ai", async (req, res) => {
     }
 });
 
-// ==================== [ AI CHATGPT ENDPOINTS ] ====================
-
-// ========== [ ENDPOINT AI CHATGPT ] ==========
-app.get("/api/v1/ai/chatgpt-ai", async (req, res) => {
+// ==================== [ ENDPOINT AI ANIME (ANYA) ] ====================
+app.get("/api/v1/ai/ai-anya", async (req, res) => {
     const start = Date.now();
 
     try {
@@ -1028,23 +1023,23 @@ app.get("/api/v1/ai/chatgpt-ai", async (req, res) => {
             return jsonResponse(res, 400, {
                 status: false,
                 creator: CREATOR_NAME,
-                error: "Parameter 'query' diperlukan",
-                example: "/api/v1/ai/chatgpt-ai?query=halo",
+                error: "Parameter 'query' diperlukan kak 🥺👉👈 wakuwaku!",
+                example: "/api/v1/ai/ai-anya?query=halo anya",
                 timestamp: new Date().toISOString()
             });
         }
 
-        const result = await getAIChatGPT(query);
+        const result = await getAIAnime(query);
 
         if (result.success) {
             jsonResponse(res, 200, {
                 status: true,
-                creator: CREATOR_NAME,
+                creator: "FebryJW 🚀",
+                ai_name: "Anya Forger 🎀",
+                anime: "Spy x Family",
                 result: {
                     query: query,
-                    answer: result.answer,
-                    model: result.model,
-                    citations: result.citations
+                    answer: result.answer
                 },
                 timestamp: new Date().toISOString(),
                 response_time: `${Date.now() - start}ms`
@@ -1054,17 +1049,18 @@ app.get("/api/v1/ai/chatgpt-ai", async (req, res) => {
         }
 
     } catch (error) {
-        console.error("AI ChatGPT Endpoint Error:", error.message);
+        console.error("AI Anime Endpoint Error:", error.message);
         jsonResponse(res, 500, {
             status: false,
             creator: CREATOR_NAME,
-            error: error.message || "Terjadi kesalahan pada server",
+            error: "Maaf kak, Anya lagi error nih (╥﹏╥) Coba lagi ya nanti hehe... untuk perdamaian dunia! 🥜",
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     }
 });
 
+// ==================== [ ENDPOINT MLBB COACH ] ====================
 app.get("/api/v1/ai/mlbb-coach", async (req, res) => {
     const start = Date.now();
     const { query } = req.query;
@@ -1095,7 +1091,7 @@ app.get("/api/v1/ai/mlbb-coach", async (req, res) => {
     }
 });
 
-// ========== [ ENDPOINT AI GEMINI ] ==========
+// ==================== [ ENDPOINT AI GEMINI ] ====================
 app.get("/api/v1/ai/ai-gemini", async (req, res) => {
     const start = Date.now();
     const { query } = req.query;
@@ -1111,7 +1107,6 @@ app.get("/api/v1/ai/ai-gemini", async (req, res) => {
     const result = await getAIGemini(query);
 
     if (result.success) {
-        // Response bersih tanpa menyebutkan source nexray
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
@@ -1130,28 +1125,6 @@ app.get("/api/v1/ai/ai-gemini", async (req, res) => {
             timestamp: new Date().toISOString()
         });
     }
-});
-
-// ========== [ ENDPOINT GAMES SUSUN KATA ] ==========
-app.get("/api/v1/games/susun-kata", (req, res) => {
-    const start = Date.now();
-    
-    // Langsung ambil dari variabel di atas
-    const randomIndex = Math.floor(Math.random() * DATA_GAMES_SUSUNKATA.length);
-    const selectedGame = DATA_GAMES_SUSUNKATA[randomIndex];
-
-    jsonResponse(res, 200, {
-        status: true,
-        creator: CREATOR_NAME,
-        result: {
-            soal: selectedGame.soal,
-            tipe: selectedGame.tipe,
-            jawaban: selectedGame.jawaban
-        },
-        total_database: DATA_GAMES_SUSUNKATA.length,
-        timestamp: new Date().toISOString(),
-        response_time: `${Date.now() - start}ms`
-    });
 });
 
 module.exports = app;
