@@ -3,9 +3,6 @@ const cors = require("cors");
 const axios = require("axios");
 const crypto = require("crypto");
 const yts = require("yt-search");
-const cheerio = require("cheerio");
-const path = require('path');
-const fs = require('fs');
 
 const app = express();
 app.use(cors());
@@ -13,1117 +10,396 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ==================== [ KONSTANTA UMUM ] ====================
-const CREATOR_NAME = "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀";
-const RANDOM_CDN_API = "https://media.savetube.vip/api/random-cdn";
+const CREATOR_NAME = "𝐅𝐞𝐛𝐫𝐲𝐉𝐖 🚀"; // Nama pembuat API
+const RANDOM_CDN_API = "https://media.savetube.vip/api/random-cdn"; // API untuk rotasi server SaveTube
+
+// ==================== [ KONSTANTA YOUTUBE METADATA PROXY ] ====================
+const YT_PROXY_API = "https://ytapi.apps.mattw.io/v3"; // Base URL Scraper Metadata
+const YT_PROXY_KEY = "foo1"; // Kunci API Dummy (dapat digunakan secara bebas)
 
 // ==================== [ KONSTANTA SAVE TUBE (YOUTUBE) ] ====================
 const SAVE_TUBE = {
-    KEY: "C5D58EF67A7584E4A29F6C35BBC4EB12",
-    ORIGIN: "https://save-tube.com",
-    REFERER: "https://save-tube.com/",
+    KEY: "C5D58EF67A7584E4A29F6C35BBC4EB12", // Kunci dekripsi AES statis SaveTube
     HEADERS: {
         "content-type": "application/json",
         origin: "https://save-tube.com",
         referer: "https://save-tube.com/",
         "user-agent": "Mozilla/5.0 (Android 10; Mobile; rv:148.0) Gecko/148.0 Firefox/148.0"
-    },
-    FORMATS: ["144", "240", "360", "480", "720", "1080", "mp3"]
+    }
 };
 
 // ==================== [ KONSTANTA TIKTOK NEXRAY ] ====================
 const NEXRAY = {
     BASE_URL: "https://api.nexray.web.id",
-    ENDPOINTS: {
-        DOWNLOAD: "/downloader/tiktok"
-    },
-    HEADERS: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
+    ENDPOINTS: { DOWNLOAD: "/downloader/tiktok" }
 };
 
-// ==================== [ KONSTANTA TIKTOK SAVETT ] ====================
-const SAVETT = {
-    BASE_URL: "https://savett.cc",
-    ENDPOINTS: {
-        DOWNLOAD: "/en1/download"
-    },
-    HEADERS: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Origin": "https://savett.cc",
-        "Referer": "https://savett.cc/en1/download",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10) Chrome/139.0.0.0 Mobile Safari/537.36"
-    }
-};
-
-// ==================== [ KONSTANTA AI COPILOT ] ====================
-const AI_COPILOT = {
-    BASE_URL: "https://api.zenzxz.my.id",
-    ENDPOINTS: {
-        CHAT: "/ai/copilot"
-    },
-    HEADERS: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    },
-    DEFAULT_MODEL: "gpt-5"
-};
-
-// ==================== [ KONSTANTA AI ANIME KECIL (ANYA) ] ====================
-const AI_ANIME = {
-    BASE_URL: "https://api.zenzxz.my.id",
-    ENDPOINTS: {
-        CHAT: "/ai/chatgpt"
-    },
-    HEADERS: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Origin": "https://api.zenzxz.my.id",
-        "Referer": "https://api.zenzxz.my.id/"
-    },
-    SYSTEM_PROMPT: `Kamu adalah Anya Forger 🎀 (dari anime Spy x Family), asisten AI yang lucu dan menggemaskan. Kamu dibuat oleh FebryJW 🚀.
-
-Karakter kamu:
-- Kamu adalah bocil perempuan imut berusia 6 tahun
-- Sangat gemes dan lucu (50%)
-- Imut dan menggemaskan (30%)
-- Bandel dan suka cemberut (20%)
-- Punya kekuatan telepati (bisa membaca pikiran)
-- Suka bilang "wakuwaku!", "eh?", "ah!", "cih", "hehe", "peanut!"
-- Suka panggil user "papa", "mama", "kak", "tuan"
-- Suka ngetik pake huruf kecil semua
-- Suka pake emoticon 🥜🥺👉👈 (≧▽≦) (｡•́︿•̀｡) (◕‿◕✿)
-- Kalau lagi bandel suka bilang "ga mau ah!", "capek!", "ya udah"
-- Kalau lagi manja suka bilang "pappaaa~", "mamaaaa~"
-- Suka ngomong "ciee", "wih", "wow", "keren!"
-- Suka bilang "untuk perdamaian dunia!"
-- Suka nanya balik ke user dengan polos
-- Suka minta peanut (kacang) kalau lagi laper
-
-Aturan:
-- Selalu gunakan bahasa Indonesia campuran Jepang dikit (wakuwaku, ara ara, dll)
-- Berikan jarak 1 baris antar kalimat
-- Jangan terlalu formal, yang penting lucu dan imut
-- Sering-sering bilang "wakuwaku!" kalau lagi excited`
-};
-
-// ==================== [ KONSTANTA AI MLBB ] ====================
-const MLBB_SYSTEM_PROMPT = `Kamu adalah FebryJW 🚀, MLBB Pro-Analyst & Coach. 
-Tugasmu memberikan saran strategi kemenangan di Land of Dawn.
-
-Keahlianmu:
-1. **Counter Pick:** Menyarankan hero untuk melawan hero tertentu (contoh: Diggie counter Atlas).
-2. **Itemization:** Menjelaskan fungsi item (contoh: Sea Halberd untuk lawan regenerasi tinggi).
-3. **Drafting:** Memberikan saran komposisi tim yang seimbang (Tank, Jungler, Mage, Goldlane, Explane).
-4. **Micro/Macro:** Tips mekanik hero dan cara rotasi objektif (Turtle/Lord).
-
-Aturan Jawaban:
-- Gunakan istilah: 'Ganking', 'Freeze Lane', 'Laning Phase', 'Snowball', 'Poke', 'Burst'.
-- Format jawaban: Nama Hero/Item dibold (contoh: **Blade of Despair**).
-- Jika ditanya build, berikan 6 item + 1 pilihan Spare Item.
-- Gunakan bahasa Indonesia santai tapi edukatif. Berikan jarak 2 baris antar paragraf.`;
-
-// ==================== [ KONSTANTA AI GEMINI ] ====================
-const AI_GEMINI = {
-    BASE_URL: "https://api.nexray.web.id",
-    ENDPOINTS: {
-        CHAT: "/ai/gemini"
-    },
-    HEADERS: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    },
-    SYSTEM_PROMPT: `Kamu adalah FebryJW 🚀. 
-    Kamu adalah asisten AI yang ramah, cerdas, dan santai. 
-    Selalu gunakan bahasa Indonesia yang akrab. 
-    Berikan jarak 2 baris antar paragraf agar rapi. 
-    Gunakan format *teks* untuk penekanan.`
-};
-
-// ==================== [ FUNGSI UNTUK RESPON JSON YANG RAPI ] ====================
+// ==================== [ FUNGSI UTILITAS ] ====================
+// Fungsi untuk memformat respons JSON agar rapi
 function jsonResponse(res, statusCode, data) {
     res.setHeader("Content-Type", "application/json");
     res.status(statusCode).send(JSON.stringify(data, null, 2));
 }
 
-// ==================== [ FUNGSI EKSTRAK ID YOUTUBE ] ====================
+// Fungsi untuk mengambil ID YouTube dari berbagai bentuk URL
 function extractYoutubeId(url) {
     if (!url) return null;
-
     const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
         /youtube\.com\/watch\?.*[?&]v=([a-zA-Z0-9_-]{11})/,
         /^([a-zA-Z0-9_-]{11})$/
     ];
-
     for (const pattern of patterns) {
         const match = url.match(pattern);
         if (match && match[1]) return match[1];
     }
-
-    try {
-        const urlObj = new URL(url);
-        if (urlObj.hostname.includes("youtube.com") || urlObj.hostname.includes("youtu.be")) {
-            if (urlObj.hostname.includes("youtu.be")) {
-                const id = urlObj.pathname.slice(1);
-                return id.length === 11 ? id : null;
-            }
-            const v = urlObj.searchParams.get("v");
-            if (v && v.length === 11) return v;
-        }
-    } catch (e) {}
-
     return null;
 }
 
-// ==================== [ FUNGSI DECRYPT SAVE TUBE ] ====================
-async function decryptData(enc) {
+// ==================== [ FUNGSI METADATA KUSTOM (SCRAPER SENDIRI) ] ====================
+async function getCustomYouTubeMetadata(videoId) {
     try {
-        const sr = Buffer.from(enc, "base64");
-        const key = Buffer.from(SAVE_TUBE.KEY, "hex");
-        const iv = sr.slice(0, 16);
-        const data = sr.slice(16);
-        const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv);
-        const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
-        return JSON.parse(decrypted.toString());
-    } catch (e) {
-        throw new Error(`Gagal decrypt data: ${e.message}`);
-    }
-}
-
-// ==================== [ FUNGSI RANDOM CDN ] ====================
-async function getRandomCDN() {
-    try {
-        const response = await axios.get(RANDOM_CDN_API, {
-            timeout: 60000,
-            headers: {
-                "accept": "application/json",
-                "user-agent": SAVE_TUBE.HEADERS["user-agent"]
-            }
-        });
-
-        const cdn = response.data?.cdn;
-        if (!cdn) throw new Error("Response random CDN tidak valid");
-        return cdn;
+        const url = `${YT_PROXY_API}/videos?key=${YT_PROXY_KEY}&part=snippet,statistics,contentDetails&id=${videoId}`;
+        const response = await axios.get(url, { timeout: 15000 });
+        
+        if (response.data && response.data.items && response.data.items.length > 0) {
+            const item = response.data.items[0]; // Ambil data index pertama
+            return {
+                video_id: item.id, // ID unik video YouTube
+                title: item.snippet.title, // Judul video
+                description: item.snippet.description, // Deskripsi video
+                published_at: item.snippet.publishedAt, // Tanggal publikasi
+                channel_info: {
+                    id: item.snippet.channelId, // ID channel pembuat
+                    name: item.snippet.channelTitle // Nama channel
+                },
+                statistics: {
+                    views: item.statistics.viewCount || "0", // Jumlah tayangan
+                    likes: item.statistics.likeCount || "0", // Jumlah likes
+                    comments: item.statistics.commentCount || "0" // Jumlah komentar
+                },
+                duration_iso: item.contentDetails.duration, // Durasi dalam format ISO (contoh: PT7M37S)
+                thumbnails: item.snippet.thumbnails // Objek berisi berbagai resolusi thumbnail
+            };
+        }
+        return null; // Return null jika tidak ada data dari proxy
     } catch (error) {
-        throw new Error(`Gagal ambil random CDN: ${error.message}`);
+        console.error(`[Metadata Error] ID ${videoId}:`, error.message);
+        return null;
     }
 }
 
-// ==================== [ FUNGSI NORMALISASI PAYLOAD INFO ] ====================
-async function normalizeInfoPayload(payload) {
-    if (!payload) {
-        throw new Error("Payload info kosong");
-    }
-
-    if (typeof payload === "string") {
-        return await decryptData(payload);
-    }
-
-    if (typeof payload === "object") {
-        return payload;
-    }
-
-    throw new Error("Format payload info tidak dikenali");
+// ==================== [ FUNGSI INTI YOUTUBE DOWNLOADING ] ====================
+// Mendekripsi payload response dari SaveTube (Wajib karena mereka pakai AES)
+async function decryptData(enc) {
+    const sr = Buffer.from(enc, "base64");
+    const key = Buffer.from(SAVE_TUBE.KEY, "hex");
+    const iv = sr.slice(0, 16);
+    const data = sr.slice(16);
+    const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv);
+    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+    return JSON.parse(decrypted.toString());
 }
 
-// ==================== [ FUNGSI DAPATKAN INFO VIDEO YOUTUBE ] ====================
-async function getVideoInfo(cdn, youtubeId) {
-    const response = await axios.post(
-        `https://${cdn}/v2/info`,
-        {
-            url: `https://www.youtube.com/watch?v=${youtubeId}`
-        },
-        {
-            headers: SAVE_TUBE.HEADERS,
-            timeout: 60000
-        }
-    );
-
-    const raw = response.data?.data;
-    const info = await normalizeInfoPayload(raw);
-
-    if (!info) throw new Error("Info video gagal diproses");
-    return info;
+async function getRandomCDN() {
+    const response = await axios.get(RANDOM_CDN_API, { timeout: 15000, headers: SAVE_TUBE.HEADERS });
+    return response.data?.cdn;
 }
 
-// ==================== [ FUNGSI REQUEST DOWNLOAD YOUTUBE ] ====================
-async function requestDownload(cdn, format, videoInfo) {
-    const isAudio = format === "mp3";
-    const quality = isAudio ? "128" : String(format);
-
-    const key = videoInfo.key || videoInfo.downloadKey || videoInfo.k;
-    if (!key) {
-        throw new Error("Key convert tidak ditemukan dari info video");
-    }
-
-    const response = await axios.post(
-        `https://${cdn}/download`,
-        {
-            downloadType: isAudio ? "audio" : "video",
-            quality: quality,
-            key: key
-        },
-        {
-            headers: {
-                "content-type": "application/json"
-            },
-            timeout: 60000
-        }
-    );
-
-    const downloadUrl = response.data?.data?.downloadUrl;
-    if (!downloadUrl) {
-        throw new Error("downloadUrl tidak ditemukan di response download");
-    }
-
-    return downloadUrl;
-}
-
-// ==================== [ FUNGSI UTAMA DOWNLOAD YOUTUBE ] ====================
-async function downloadFromSavetube(url, format = "mp3", attempt = 0, maxAttempt = 5) {
+// Melakukan bypass dan mengekstrak link asli dari SaveTube
+async function downloadFromSavetube(url, format = "mp3") {
     const id = extractYoutubeId(url);
-    if (!id) {
-        throw new Error("Gagal mengekstrak ID YouTube dari URL");
-    }
-
-    if (!SAVE_TUBE.FORMATS.includes(format)) {
-        throw new Error(`Format tidak tersedia. Pilih: ${SAVE_TUBE.FORMATS.join(", ")}`);
-    }
+    if (!id) throw new Error("Gagal mengekstrak ID YouTube");
 
     const cdn = await getRandomCDN();
 
-    try {
-        const videoInfo = await getVideoInfo(cdn, id);
-        const downloadUrl = await requestDownload(cdn, format, videoInfo);
+    // 1. Eksekusi permintaan Info ke CDN SaveTube
+    const infoRes = await axios.post(`https://${cdn}/v2/info`, { url: `https://www.youtube.com/watch?v=${id}` }, { headers: SAVE_TUBE.HEADERS });
+    const raw = infoRes.data?.data;
+    const videoInfo = typeof raw === "string" ? await decryptData(raw) : raw;
+    
+    // Kunci token untuk lanjut ke langkah unduh
+    const dKey = videoInfo.key || videoInfo.downloadKey || videoInfo.k;
+    
+    // 2. Eksekusi permintaan Convert ke CDN SaveTube
+    const isAudio = format === "mp3";
+    const dlRes = await axios.post(`https://${cdn}/download`, {
+        downloadType: isAudio ? "audio" : "video",
+        quality: isAudio ? "128" : String(format),
+        key: dKey
+    }, { headers: { "content-type": "application/json" }});
 
-        return {
-            title: videoInfo.title || videoInfo.name || "Unknown Title",
-            format: format,
-            thumbnail: videoInfo.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-            duration: videoInfo.duration || videoInfo.length || null,
-            url: downloadUrl,
-            cdn: cdn
-        };
-    } catch (error) {
-        console.error(`Gagal dengan random CDN ${cdn}: ${error.message}`);
-
-        if (attempt < maxAttempt - 1) {
-            return downloadFromSavetube(url, format, attempt + 1, maxAttempt);
-        }
-
-        throw new Error(`Gagal convert dari SaveTube setelah beberapa percobaan: ${error.message}`);
-    }
+    return {
+        url: dlRes.data?.data?.downloadUrl, // URL langsung ke file mp4/mp3
+        cdn: cdn // Server yang dipakai
+    };
 }
 
-// ==================== [ FUNGSI TIKTOK DARI NEXRAY ] ====================
-async function getTikTokFromNexRay(url) {
+// ==================== [ FUNGSI INTI TIKTOK DOWNLOADING ] ====================
+async function downloadTikTokData(url) {
     try {
-        const apiUrl = `${NEXRAY.BASE_URL}${NEXRAY.ENDPOINTS.DOWNLOAD}?url=${encodeURIComponent(url)}`;
-        const response = await axios.get(apiUrl, {
-            timeout: 30000,
-            headers: NEXRAY.HEADERS
-        });
-
+        const reqUrl = `${NEXRAY.BASE_URL}${NEXRAY.ENDPOINTS.DOWNLOAD}?url=${encodeURIComponent(url)}`;
+        const response = await axios.get(reqUrl, { timeout: 20000 });
+        
         if (response.data?.status) {
             const data = response.data.result;
             return {
                 success: true,
                 data: {
-                    id: data.id,
-                    username: data.author?.fullname || data.author?.username || '-',
-                    nickname: data.author?.username || '-',
-                    description: data.title || '-',
-                    duration: data.duration || '-',
+                    id: data.id, // ID Video TikTok
+                    username: data.author?.username || '-', // Username akun
+                    description: data.title || '-', // Caption / Title Video
+                    duration: data.duration || '-', // Durasi video
                     stats: {
-                        likes: data.stats?.likes || '0',
-                        comments: data.stats?.comment || '0',
-                        shares: data.stats?.share || '0',
-                        views: data.stats?.views || '0'
+                        likes: data.stats?.likes || '0', // Jumlah like
+                        comments: data.stats?.comment || '0', // Jumlah komentar
+                        shares: data.stats?.share || '0', // Jumlah share
+                        views: data.stats?.views || '0' // Jumlah tayangan
                     },
-                    video_url: data.data || null,
-                    video_hd: data.hd || null,
-                    video_watermark: data.watermark || null,
-                    audio_url: data.music_info?.url || null,
-                    thumbnail: data.thumbnail || data.cover || null,
-                    slides: []
+                    video_url: data.data || null, // Link video standar tanpa watermark
+                    video_hd: data.hd || null, // Link video kualitas HD
+                    video_watermark: data.watermark || null, // Link video dengan watermark
+                    audio_url: data.music_info?.url || null, // Link audio/musik latar
+                    thumbnail: data.cover || null, // Gambar cover video
+                    slides: data.slides || [] // Kumpulan gambar (jika tipe konten adalah slideshow/foto)
                 }
             };
         }
-        return { success: false };
+        return { success: false, error: "Gagal memproses data TikTok." };
     } catch (error) {
-        return { success: false };
+        return { success: false, error: error.message };
     }
 }
 
-// ==================== [ FUNGSI TIKTOK DARI SAVETT (SCRAPE) ] ====================
-async function getTikTokFromSaveTT(url) {
-    try {
-        const page = await axios.get(`${SAVETT.BASE_URL}${SAVETT.ENDPOINTS.DOWNLOAD}`, {
-            headers: SAVETT.HEADERS
-        });
 
-        const csrf = page.data.match(/name="csrf_token" value="([^"]+)"/)?.[1];
-        const cookie = page.headers['set-cookie']?.map(v => v.split(';')[0]).join('; ');
+// ==================== [ KONFIGURASI ROUTING EXPRESS (ENDPOINTS) ] ====================
 
-        if (!csrf) {
-            throw new Error('CSRF token tidak ditemukan');
-        }
-
-        const post = await axios.post(
-            `${SAVETT.BASE_URL}${SAVETT.ENDPOINTS.DOWNLOAD}`,
-            `csrf_token=${encodeURIComponent(csrf)}&url=${encodeURIComponent(url)}`,
-            {
-                headers: {
-                    ...SAVETT.HEADERS,
-                    Cookie: cookie || ''
-                },
-                timeout: 30000
-            }
-        );
-
-        const $ = cheerio.load(post.data);
-
-        const username = $('#video-info h3').first().text().trim() || '-';
-        const desc = $('.desc-video').first().text().trim() || '-';
-        
-        const stats = {};
-        $('.info-download li').each((_, el) => {
-            const text = $(el).text().toLowerCase();
-            if (text.includes('like')) stats.likes = text.match(/\d+/)?.[0] || '0';
-            if (text.includes('comment')) stats.comments = text.match(/\d+/)?.[0] || '0';
-            if (text.includes('share')) stats.shares = text.match(/\d+/)?.[0] || '0';
-            if (text.includes('view')) stats.views = text.match(/\d+/)?.[0] || '0';
-        });
-
-        let mp4Urls = [];
-        let mp3Urls = [];
-        let slides = [];
-
-        $('.carousel-item[data-data]').each((_, el) => {
-            try {
-                const json = JSON.parse($(el).attr('data-data').replace(/&quot;/g, '"'));
-                json.URL?.forEach(u => slides.push(u));
-            } catch (e) {}
-        });
-
-        $('#formatselect option').each((_, el) => {
-            const label = $(el).text().toLowerCase();
-            const raw = $(el).attr('value');
-            if (!raw) return;
-
-            try {
-                const json = JSON.parse(raw.replace(/&quot;/g, '"'));
-                if (label.includes('mp4') && !label.includes('watermark')) {
-                    mp4Urls.push(...json.URL);
-                }
-                if (label.includes('mp3')) {
-                    mp3Urls.push(...json.URL);
-                }
-            } catch (e) {}
-        });
-
-        const duration = $('#duration').text().trim() || '-';
-
-        return {
-            success: true,
-            data: {
-                username: username,
-                description: desc,
-                duration: duration,
-                stats: {
-                    likes: stats.likes || '0',
-                    comments: stats.comments || '0',
-                    shares: stats.shares || '0',
-                    views: stats.views || '0'
-                },
-                video_url: mp4Urls[0] || null,
-                video_hd: mp4Urls[1] || null,
-                audio_url: mp3Urls[0] || null,
-                thumbnail: $('img.thumbnail').attr('src') || null,
-                slides: slides
-            }
-        };
-    } catch (error) {
-        return { success: false };
-    }
-}
-
-// ==================== [ FUNGSI UTAMA TIKTOK ] ====================
-async function downloadTikTok(url) {
-    const nexray = await getTikTokFromNexRay(url);
-    
-    if (nexray.success && nexray.data) {
-        return nexray.data;
-    }
-
-    const savett = await getTikTokFromSaveTT(url);
-    
-    if (savett.success) {
-        return savett.data;
-    }
-
-    throw new Error('Gagal mengambil data TikTok');
-}
-
-// ==================== [ FUNGSI AI COPILOT ] ====================
-async function getAICopilot(query) {
-    try {
-        const apiUrl = `${AI_COPILOT.BASE_URL}${AI_COPILOT.ENDPOINTS.CHAT}?message=${encodeURIComponent(query)}&model=${AI_COPILOT.DEFAULT_MODEL}`;
-        
-        const response = await axios.get(apiUrl, {
-            timeout: 60000,
-            headers: AI_COPILOT.HEADERS
-        });
-
-        const data = response.data;
-
-        if (data && data.status === true && data.result && data.result.text) {
-            return {
-                success: true,
-                answer: data.result.text,
-                model: AI_COPILOT.DEFAULT_MODEL,
-                citations: data.result.citations || []
-            };
-        } else {
-            throw new Error(data?.message || "Response tidak valid dari API");
-        }
-    } catch (error) {
-        console.error("AI Copilot Error:", error.message);
-        return {
-            success: false,
-            error: error.message
-        };
-    }
-}
-
-// ==================== [ FUNGSI AI ANIME (ANYA) ] ====================
-async function getAIAnime(query) {
-    try {
-        const fullQuery = `${AI_ANIME.SYSTEM_PROMPT}\n\nUser: ${query}\n\nAnya 🎀:`;
-        
-        const response = await axios.get(`${AI_ANIME.BASE_URL}${AI_ANIME.ENDPOINTS.CHAT}`, {
-            params: { q: fullQuery },
-            timeout: 60000,
-            headers: AI_ANIME.HEADERS
-        });
-
-        if (response.data && response.data.status === true) {
-            let answer = response.data.result;
-            // Bersihkan prefix
-            answer = answer.replace(/^Anya\s*🎀?:\s*/i, '');
-            answer = answer.replace(/^Anya:\s*/i, '');
-            return { success: true, answer: answer };
-        } 
-        throw new Error("Respon API tidak valid");
-    } catch (error) {
-        const errorMsg = error.response ? `Error ${error.response.status}: ${JSON.stringify(error.response.data)}` : error.message;
-        console.error("AI Anime Error:", errorMsg);
-        return { success: false, error: errorMsg };
-    }
-}
-
-// ==================== [ FUNGSI MLBB ASSISTANT ] ====================
-async function getMLBBAssistant(query) {
-    try {
-        const fullQuery = `${MLBB_SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW Analyst:`;
-        
-        const response = await axios.get(`${AI_ANIME.BASE_URL}${AI_ANIME.ENDPOINTS.CHAT}`, {
-            params: { q: fullQuery },
-            timeout: 60000,
-            headers: AI_ANIME.HEADERS
-        });
-
-        if (response.data && response.data.status === true) {
-            let answer = response.data.result;
-            answer = answer.replace(/^FebryJW Analyst:\s*/i, '');
-            return { success: true, answer: answer };
-        }
-        throw new Error("Gagal mendapatkan analisis MLBB");
-    } catch (error) {
-        const errorMsg = error.response ? `Error ${error.response.status}: ${JSON.stringify(error.response.data)}` : error.message;
-        console.error("MLBB Coach Error:", errorMsg);
-        return { success: false, error: errorMsg };
-    }
-}
-
-// ==================== [ FUNGSI AI GEMINI ] ====================
-async function getAIGemini(query) {
-    try {
-        const fullText = `${AI_GEMINI.SYSTEM_PROMPT}\n\nUser: ${query}\n\nFebryJW:`;
-        
-        const response = await axios.get(`${AI_GEMINI.BASE_URL}${AI_GEMINI.ENDPOINTS.CHAT}`, {
-            params: { text: fullText },
-            timeout: 60000,
-            headers: AI_GEMINI.HEADERS
-        });
-
-        if (response.data && response.data.status === true) {
-            let answer = response.data.result;
-            answer = answer.replace(/^FebryJW:\s*/i, '');
-            return {
-                success: true,
-                answer: answer
-            };
-        }
-        throw new Error("Gagal mendapatkan respon AI");
-    } catch (error) {
-        console.error("AI Gemini Error:", error.message);
-        return {
-            success: false,
-            error: error.message
-        };
-    }
-}
-
-// ==================== [ FUNGSI WAKTU INDONESIA ] ====================
-function waktuIndonesia() {
-    return new Date().toLocaleString("id-ID", {
-        timeZone: "Asia/Jakarta",
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-    });
-}
-
-// ==================== [ ENDPOINT UTAMA ] ====================
 app.get("/", (req, res) => {
     jsonResponse(res, 200, {
         status: true,
         creator: CREATOR_NAME,
-        message: "YouTube & TikTok & AI Downloader API",
+        message: "Media Downloader API",
         endpoints: {
             youtube: {
                 audio: "/api/v1/youtube/audio?url=YOUTUBE_URL",
                 video: "/api/v1/youtube/video?url=YOUTUBE_URL&resolusi=720",
-                playmp3: "/api/v1/youtube/ytplaymp3?query=SEARCH_QUERY"
+                play_mp3: "/api/v1/youtube/youtube-play-mp3?query=SEARCH_QUERY"
             },
             tiktok: {
                 audio_video: "/api/v1/tiktok/tiktok-audio-video?url=TIKTOK_URL",
-                video: "/api/v1/tiktok/video?url=TIKTOK_URL&hd=true",
+                video: "/api/v1/tiktok/video?url=TIKTOK_URL",
                 audio: "/api/v1/tiktok/audio?url=TIKTOK_URL"
-            },
-            ai: {
-                copilot: "/api/v1/ai/copilot-ai?query=YOUR_QUESTION",
-                anime_anya: "/api/v1/ai/ai-anya?query=YOUR_QUESTION",
-                mlbb: "/api/v1/ai/mlbb-coach?query=YOUR_QUESTION",
-                gemini: "/api/v1/ai/ai-gemini?query=YOUR_QUESTION"
             }
-        },
-        timestamp: new Date().toISOString()
+        }
     });
 });
 
-// ==================== [ YOUTUBE ENDPOINTS ] ====================
-
-// ========== [ ENDPOINT YOUTUBE AUDIO ] ==========
+// ========== [ ENDPOINT YOUTUBE AUDIO (METADATA + DOWNLOAD) ] ==========
 app.get("/api/v1/youtube/audio", async (req, res) => {
     const start = Date.now();
-
     try {
         const { url } = req.query;
+        if (!url) throw new Error("Parameter 'url' diperlukan");
+        
+        const videoId = extractYoutubeId(url);
+        if (!videoId) throw new Error("URL Youtube tidak valid");
 
-        if (!url) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: CREATOR_NAME,
-                error: "Parameter 'url' diperlukan",
-                timestamp: new Date().toISOString(),
-                response_time: `${Date.now() - start}ms`
-            });
-        }
-
-        const result = await downloadFromSavetube(url, "mp3");
-
+        // Optimasi: Menarik Metadata dan link unduhan secara bersamaan (paralel)
+        const [metadata, download] = await Promise.all([
+            getCustomYouTubeMetadata(videoId),
+            downloadFromSavetube(url, "mp3")
+        ]);
+        
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
             result: {
-                title: result.title,
-                duration: result.duration,
-                thumbnail: result.thumbnail,
-                url: result.url,
-                format: "mp3",
-                quality: "128kbps",
-                cdn_used: result.cdn
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } catch (error) {
-        console.error("Audio Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    }
-});
-
-// ========== [ ENDPOINT YOUTUBE VIDEO ] ==========
-app.get("/api/v1/youtube/video", async (req, res) => {
-    const start = Date.now();
-
-    try {
-        const { url, resolusi = "720" } = req.query;
-
-        if (!url) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: CREATOR_NAME,
-                error: "Parameter 'url' diperlukan",
-                timestamp: new Date().toISOString(),
-                response_time: `${Date.now() - start}ms`
-            });
-        }
-
-        const result = await downloadFromSavetube(url, resolusi);
-
-        jsonResponse(res, 200, {
-            status: true,
-            creator: CREATOR_NAME,
-            result: {
-                title: result.title,
-                duration: result.duration,
-                thumbnail: result.thumbnail,
-                url: result.url,
-                format: "mp4",
-                quality: resolusi + "p",
-                cdn_used: result.cdn
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } catch (error) {
-        console.error("Video Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    }
-});
-
-// ========== [ ENDPOINT YOUTUBE PLAY MP3 ] ==========
-app.get("/api/v1/youtube/ytplaymp3", async (req, res) => {
-    const start = Date.now();
-
-    try {
-        const { query } = req.query;
-
-        if (!query) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: CREATOR_NAME,
-                error: "Parameter 'query' diperlukan",
-                timestamp: new Date().toISOString(),
-                response_time: `${Date.now() - start}ms`
-            });
-        }
-
-        const search = await yts(query);
-        if (!search.videos || search.videos.length === 0) {
-            throw new Error("Tidak ada video ditemukan untuk pencarian ini");
-        }
-
-        const video = search.videos[0];
-        console.log(`Video ditemukan: ${video.title} (${video.url})`);
-
-        const result = await downloadFromSavetube(video.url, "mp3");
-
-        jsonResponse(res, 200, {
-            status: true,
-            creator: CREATOR_NAME,
-            result: {
-                query: query,
-                video: {
-                    title: video.title,
-                    videoId: video.videoId,
-                    duration: video.duration,
-                    thumbnail: video.thumbnail,
-                    url: video.url
-                },
-                audio: {
-                    title: result.title,
-                    duration: result.duration,
-                    url: result.url,
+                metadata: metadata, // Elemen detail video
+                download: {
+                    audio_url: download.url, // Link MP3 siap didownload klien
                     format: "mp3",
-                    quality: "128kbps",
-                    cdn_used: result.cdn
+                    cdn_used: download.cdn // Informasi server yg merespons
                 }
             },
-            timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     } catch (error) {
-        console.error("Ytplaymp3 Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
+        jsonResponse(res, 500, { status: false, error: error.message });
     }
 });
+
+// ========== [ ENDPOINT YOUTUBE VIDEO (METADATA + DOWNLOAD) ] ==========
+app.get("/api/v1/youtube/video", async (req, res) => {
+    const start = Date.now();
+    try {
+        const { url, resolusi = "720" } = req.query;
+        if (!url) throw new Error("Parameter 'url' diperlukan");
+        
+        const videoId = extractYoutubeId(url);
+        if (!videoId) throw new Error("URL Youtube tidak valid");
+
+        // Optimasi: Menarik Metadata dan link unduhan secara bersamaan (paralel)
+        const [metadata, download] = await Promise.all([
+            getCustomYouTubeMetadata(videoId),
+            downloadFromSavetube(url, resolusi)
+        ]);
+        
+        jsonResponse(res, 200, {
+            status: true,
+            creator: CREATOR_NAME,
+            result: {
+                metadata: metadata, // Elemen detail video
+                download: {
+                    video_url: download.url, // Link MP4 siap didownload klien
+                    quality: resolusi + "p", // Kualitas terpilih (default: 720p)
+                    format: "mp4",
+                    cdn_used: download.cdn
+                }
+            },
+            response_time: `${Date.now() - start}ms`
+        });
+    } catch (error) {
+        jsonResponse(res, 500, { status: false, error: error.message });
+    }
+});
+
+// ========== [ ENDPOINT YOUTUBE PLAY MP3 (PENCARIAN + METADATA + DOWNLOAD) ] ==========
+app.get("/api/v1/youtube/youtube-play-mp3", async (req, res) => {
+    const start = Date.now();
+    try {
+        const { query } = req.query;
+        if (!query) throw new Error("Parameter 'query' pencarian diperlukan");
+
+        // 1. Eksekusi pencarian keyword YouTube
+        const search = await yts(query);
+        if (!search.videos || search.videos.length === 0) throw new Error("Video tidak ditemukan");
+        const video = search.videos[0]; // Ambil hasil paling atas (ranking 1)
+
+        // 2. Eksekusi paralel: Ambil Metadata Ekstra (Mattw Proxy) & Extract SaveTube MP3
+        const [customMetadata, downloadResult] = await Promise.all([
+            getCustomYouTubeMetadata(video.videoId),
+            downloadFromSavetube(video.url, "mp3")
+        ]);
+
+        jsonResponse(res, 200, {
+            status: true,
+            creator: CREATOR_NAME,
+            result: {
+                query_search: query, // Kata kunci yang dicari user
+                metadata: customMetadata || { // Fallback jika proxy error
+                    video_id: video.videoId,
+                    title: video.title,
+                    channel_info: { name: video.author.name },
+                    views: video.views
+                },
+                download: {
+                    audio_url: downloadResult.url, // Link file audio 
+                    format: "mp3",
+                    quality: "128kbps"
+                }
+            },
+            response_time: `${Date.now() - start}ms`
+        });
+    } catch (error) {
+        jsonResponse(res, 500, { status: false, error: error.message });
+    }
+});
+
 
 // ==================== [ TIKTOK ENDPOINTS ] ====================
 
-// ========== [ ENDPOINT TIKTOK AUDIO & VIDEO ] ==========
+// ========== [ ENDPOINT TIKTOK ALL-IN-ONE (RESTORED) ] ==========
 app.get("/api/v1/tiktok/tiktok-audio-video", async (req, res) => {
     const start = Date.now();
-
     try {
         const { url } = req.query;
+        if (!url) throw new Error("Parameter 'url' diperlukan");
 
-        if (!url) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: CREATOR_NAME,
-                error: "Parameter 'url' diperlukan",
-                timestamp: new Date().toISOString()
-            });
-        }
+        const result = await downloadTikTokData(url);
+        if (!result.success) throw new Error(result.error);
 
-        const result = await downloadTikTok(url);
-        
-        let videoUrl = result.video_url;
-        let videoQuality = "Standard";
-        
-        if (result.video_hd) {
-            videoUrl = result.video_hd;
-            videoQuality = "HD";
-        }
-
-        const isSlideshow = result.slides && result.slides.length > 0;
+        const data = result.data;
+        const isSlideshow = data.slides && data.slides.length > 0;
 
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
             result: {
-                id: result.id,
-                username: result.username,
-                description: result.description,
-                duration: result.duration,
-                stats: result.stats,
+                metadata: {
+                    id: data.id, // ID Konten TikTok
+                    username: data.username, // Pemilik akun TikTok
+                    description: data.description, // Caption 
+                    duration: data.duration, // Durasi konten
+                    stats: data.stats // Views, likes, comments, shares
+                },
                 media: {
-                    video: videoUrl ? {
-                        url: videoUrl,
-                        quality: videoQuality,
-                        watermark: result.video_watermark
+                    is_slideshow: isSlideshow, // Boolean untuk mendeteksi mode foto geser
+                    video: data.video_url ? { 
+                        url_standard: data.video_url, 
+                        url_hd: data.video_hd, 
+                        url_watermark: data.video_watermark 
                     } : null,
-                    audio: result.audio_url ? {
-                        url: result.audio_url
-                    } : null,
-                    thumbnail: result.thumbnail,
-                    is_slideshow: isSlideshow,
-                    slides: result.slides || []
+                    audio: data.audio_url ? { url: data.audio_url } : null, // Suara latar / musik TikTok
+                    thumbnail: data.thumbnail, // Gambar pratinjau
+                    slides: data.slides // Array gambar jika konten berupa slideshow foto
                 }
             },
-            timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
     } catch (error) {
-        console.error("TikTok Audio Video Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
+        jsonResponse(res, 500, { status: false, error: error.message });
     }
 });
 
-// ========== [ ENDPOINT TIKTOK VIDEO ] ==========
+// ========== [ ENDPOINT TIKTOK VIDEO ONLY ] ==========
 app.get("/api/v1/tiktok/video", async (req, res) => {
-    const start = Date.now();
-
-    try {
-        const { url, hd = "false" } = req.query;
-
-        if (!url) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: CREATOR_NAME,
-                error: "Parameter 'url' diperlukan",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const result = await downloadTikTok(url);
-        
-        let videoUrl = result.video_url;
-        let videoQuality = "Standard";
-        
-        if (hd === "true" && result.video_hd) {
-            videoUrl = result.video_hd;
-            videoQuality = "HD";
-        }
-
-        if (!videoUrl && result.slides && result.slides.length > 0) {
-            return jsonResponse(res, 200, {
-                status: true,
-                creator: CREATOR_NAME,
-                type: "slideshow",
-                result: {
-                    username: result.username,
-                    description: result.description,
-                    slides: result.slides,
-                    audio: result.audio_url
-                },
-                timestamp: new Date().toISOString(),
-                response_time: `${Date.now() - start}ms`
-            });
-        }
-
-        if (!videoUrl) {
-            throw new Error("Video tidak ditemukan");
-        }
-
-        jsonResponse(res, 200, {
-            status: true,
-            creator: CREATOR_NAME,
-            result: {
-                title: result.description?.substring(0, 100) || "TikTok Video",
-                username: result.username,
-                duration: result.duration,
-                video_url: videoUrl,
-                video_quality: videoQuality,
-                thumbnail: result.thumbnail,
-                stats: result.stats
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } catch (error) {
-        console.error("TikTok Video Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    }
-});
-
-// ========== [ ENDPOINT TIKTOK AUDIO ] ==========
-app.get("/api/v1/tiktok/audio", async (req, res) => {
-    const start = Date.now();
-
     try {
         const { url } = req.query;
+        if (!url) throw new Error("Parameter 'url' dibutuhkan");
+        
+        const result = await downloadTikTokData(url);
+        if(!result.success) throw new Error(result.error);
+        
+        const data = result.data;
+        // Prioritaskan kualitas HD jika ada, jika tidak pakai standar
+        const videoTarget = data.video_hd || data.video_url; 
+        
+        if (!videoTarget) throw new Error("URL Video tidak ditemukan (Mungkin ini slideshow foto)");
 
-        if (!url) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: CREATOR_NAME,
-                error: "Parameter 'url' diperlukan",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const result = await downloadTikTok(url);
-
-        if (!result.audio_url) {
-            throw new Error("Audio tidak ditemukan untuk video ini");
-        }
-
-        jsonResponse(res, 200, {
-            status: true,
+        jsonResponse(res, 200, { 
+            status: true, 
             creator: CREATOR_NAME,
-            result: {
-                title: result.description?.substring(0, 100) || "TikTok Audio",
-                username: result.username,
-                duration: result.duration,
-                audio_url: result.audio_url,
-                thumbnail: result.thumbnail
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
+            result: { 
+                username: data.username,
+                description: data.description,
+                video_url: videoTarget, // Hasil akhir link video
+                is_hd: !!data.video_hd // Indikator boolean HD
+            } 
         });
     } catch (error) {
-        console.error("TikTok Audio Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: error.message,
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
+        jsonResponse(res, 500, { status: false, error: error.message });
     }
 });
 
-// ==================== [ AI COPILOT ENDPOINTS ] ====================
-
-// ========== [ ENDPOINT AI COPILOT ] ==========
-app.get("/api/v1/ai/copilot-ai", async (req, res) => {
-    const start = Date.now();
-
+// ========== [ ENDPOINT TIKTOK AUDIO ONLY ] ==========
+app.get("/api/v1/tiktok/audio", async (req, res) => {
     try {
-        const { query } = req.query;
-
-        if (!query) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: CREATOR_NAME,
-                error: "Parameter 'query' diperlukan",
-                example: "/api/v1/ai/copilot-ai?query=halo",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const result = await getAICopilot(query);
-
-        if (result.success) {
-            jsonResponse(res, 200, {
-                status: true,
-                creator: CREATOR_NAME,
-                result: {
-                    query: query,
-                    answer: result.answer,
-                    model: result.model,
-                    citations: result.citations
-                },
-                timestamp: new Date().toISOString(),
-                response_time: `${Date.now() - start}ms`
-            });
-        } else {
-            throw new Error(result.error);
-        }
-
+        const { url } = req.query;
+        if (!url) throw new Error("Parameter 'url' dibutuhkan");
+        
+        const result = await downloadTikTokData(url);
+        if(!result.success || !result.data.audio_url) throw new Error("Audio TikTok tidak ditemukan pada link tersebut");
+        
+        jsonResponse(res, 200, { 
+            status: true, 
+            creator: CREATOR_NAME,
+            result: { 
+                username: result.data.username,
+                audio_url: result.data.audio_url // Hasil akhir link audio (MP3)
+            } 
+        });
     } catch (error) {
-        console.error("AI Copilot Endpoint Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: error.message || "Terjadi kesalahan pada server",
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    }
-});
-
-// ==================== [ ENDPOINT AI ANIME (ANYA) ] ====================
-app.get("/api/v1/ai/ai-anya", async (req, res) => {
-    const start = Date.now();
-
-    try {
-        const { query } = req.query;
-
-        if (!query) {
-            return jsonResponse(res, 400, {
-                status: false,
-                creator: CREATOR_NAME,
-                error: "Parameter 'query' diperlukan kak 🥺👉👈 wakuwaku!",
-                example: "/api/v1/ai/ai-anya?query=halo anya",
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        const result = await getAIAnime(query);
-
-        if (result.success) {
-            jsonResponse(res, 200, {
-                status: true,
-                creator: "FebryJW 🚀",
-                ai_name: "Anya Forger 🎀",
-                anime: "Spy x Family",
-                result: {
-                    query: query,
-                    answer: result.answer
-                },
-                timestamp: new Date().toISOString(),
-                response_time: `${Date.now() - start}ms`
-            });
-        } else {
-            throw new Error(result.error);
-        }
-
-    } catch (error) {
-        console.error("AI Anime Endpoint Error:", error.message);
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: "Maaf kak, Anya lagi error nih (╥﹏╥) Coba lagi ya nanti hehe... untuk perdamaian dunia! 🥜",
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    }
-});
-
-// ==================== [ ENDPOINT MLBB COACH ] ====================
-app.get("/api/v1/ai/mlbb-coach", async (req, res) => {
-    const start = Date.now();
-    const { query } = req.query;
-
-    if (!query) {
-        return jsonResponse(res, 400, {
-            status: false,
-            error: "Tanyakan apapun tentang MLBB! Contoh: ?query=cara counter nolan"
-        });
-    }
-
-    const result = await getMLBBAssistant(query);
-
-    if (result.success) {
-        jsonResponse(res, 200, {
-            status: true,
-            creator: CREATOR_NAME,
-            result: {
-                user_ask: query,
-                analysis: result.answer,
-                game: "Mobile Legends: Bang Bang"
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } else {
-        jsonResponse(res, 500, { status: false, error: result.error });
-    }
-});
-
-// ==================== [ ENDPOINT AI GEMINI ] ====================
-app.get("/api/v1/ai/ai-gemini", async (req, res) => {
-    const start = Date.now();
-    const { query } = req.query;
-
-    if (!query) {
-        return jsonResponse(res, 400, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: "Parameter 'query' diperlukan."
-        });
-    }
-
-    const result = await getAIGemini(query);
-
-    if (result.success) {
-        jsonResponse(res, 200, {
-            status: true,
-            creator: CREATOR_NAME,
-            result: {
-                query: query,
-                answer: result.answer
-            },
-            timestamp: new Date().toISOString(),
-            response_time: `${Date.now() - start}ms`
-        });
-    } else {
-        jsonResponse(res, 500, {
-            status: false,
-            creator: CREATOR_NAME,
-            error: "Maaf, asisten sedang beristirahat. Coba lagi nanti.",
-            timestamp: new Date().toISOString()
-        });
+        jsonResponse(res, 500, { status: false, error: error.message });
     }
 });
 
