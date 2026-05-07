@@ -115,27 +115,22 @@ async function getMetadataFromMatthew(videoId) {
     }
 }
 
-// ==================== [ FUNGSI SEARCH YOUTUBE (yt-search + Matthew Metadata) ] ====================
+// ==================== [ FUNGSI SEARCH YOUTUBE ] ====================
 async function searchYouTubeWithMetadata(query, limit = 20) {
     try {
-        // Step 1: Search menggunakan yt-search
         const searchResults = await yts(query);
         
         if (!searchResults.videos || searchResults.videos.length === 0) {
             return { success: true, query: query, total_results: 0, results: [] };
         }
         
-        // Ambil limited results
         const limitedVideos = searchResults.videos.slice(0, limit);
         
-        // Step 2: Ambil metadata dari Matthew API untuk setiap video (parallel)
         const resultsWithMetadata = await Promise.all(
             limitedVideos.map(async (video) => {
-                // Dapatkan metadata lengkap dari Matthew API
                 const matthewMeta = await getMetadataFromMatthew(video.videoId);
                 
                 if (matthewMeta) {
-                    // Gunakan metadata dari Matthew (lebih lengkap)
                     return {
                         video_id: matthewMeta.video_id,
                         title: matthewMeta.title,
@@ -151,7 +146,6 @@ async function searchYouTubeWithMetadata(query, limit = 20) {
                         url: matthewMeta.url
                     };
                 } else {
-                    // Fallback ke data dari yt-search jika Matthew API gagal
                     return {
                         video_id: video.videoId,
                         title: video.title,
@@ -210,7 +204,7 @@ function formatDuration(seconds) {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
-// ==================== [ FUNGSI METADATA UNTUK SINGLE VIDEO ] ====================
+// ==================== [ FUNGSI CUSTOM METADATA ] ====================
 async function getCustomYouTubeMetadata(videoId) {
     return getMetadataFromMatthew(videoId);
 }
@@ -314,8 +308,10 @@ app.get("/", (req, res) => {
         endpoints: {
             youtube: {
                 search: "/api/v1/youtube/youtube-search?query=KEYWORD&limit=20",
-                audio: "/api/v1/youtube/audio?url=YOUTUBE_URL",
-                video: "/api/v1/youtube/video?url=YOUTUBE_URL&resolusi=720",
+                audio: "/api/v1/youtube/youtube-audio?url=YOUTUBE_URL",
+                video: "/api/v1/youtube/youtube-video?url=YOUTUBE_URL&resolusi=720",
+                audio_with_metadata: "/api/v1/youtube/audio?url=YOUTUBE_URL",
+                video_with_metadata: "/api/v1/youtube/video?url=YOUTUBE_URL&resolusi=720",
                 play_mp3: "/api/v1/youtube/youtube-play-mp3?query=SEARCH_QUERY"
             },
             tiktok: {
@@ -327,7 +323,7 @@ app.get("/", (req, res) => {
     });
 });
 
-// ========== [ ENDPOINT YOUTUBE SEARCH (yt-search + Matthew Metadata) ] ==========
+// ========== [ ENDPOINT YOUTUBE SEARCH ] ==========
 app.get("/api/v1/youtube/youtube-search", async (req, res) => {
     const start = Date.now();
     try {
@@ -374,7 +370,93 @@ app.get("/api/v1/youtube/youtube-search", async (req, res) => {
     }
 });
 
-// ========== [ ENDPOINT YOUTUBE AUDIO ] ==========
+// ========== [ ENDPOINT YOUTUBE AUDIO (DOWNLOAD ONLY - TANPA METADATA) ] ==========
+app.get("/api/v1/youtube/youtube-audio", async (req, res) => {
+    const start = Date.now();
+    try {
+        const { url } = req.query;
+        
+        if (!url) {
+            return jsonResponse(res, 400, {
+                status: false,
+                creator: CREATOR_NAME,
+                error: "Parameter 'url' diperlukan",
+                example: "/api/v1/youtube/youtube-audio?url=https://youtube.com/watch?v=xxx",
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        const result = await downloadFromSavetube(url, "mp3");
+
+        jsonResponse(res, 200, {
+            status: true,
+            creator: CREATOR_NAME,
+            result: {
+                download_url: result.url,
+                format: "mp3",
+                quality: "128kbps",
+                cdn_used: result.cdn
+            },
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+
+    } catch (error) {
+        console.error("YouTube Audio Error:", error.message);
+        jsonResponse(res, 500, {
+            status: false,
+            creator: CREATOR_NAME,
+            error: error.message,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    }
+});
+
+// ========== [ ENDPOINT YOUTUBE VIDEO (DOWNLOAD ONLY - TANPA METADATA) ] ==========
+app.get("/api/v1/youtube/youtube-video", async (req, res) => {
+    const start = Date.now();
+    try {
+        const { url, resolusi = "720" } = req.query;
+        
+        if (!url) {
+            return jsonResponse(res, 400, {
+                status: false,
+                creator: CREATOR_NAME,
+                error: "Parameter 'url' diperlukan",
+                example: "/api/v1/youtube/youtube-video?url=https://youtube.com/watch?v=xxx&resolusi=720",
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        const result = await downloadFromSavetube(url, resolusi);
+
+        jsonResponse(res, 200, {
+            status: true,
+            creator: CREATOR_NAME,
+            result: {
+                download_url: result.url,
+                format: "mp4",
+                quality: resolusi + "p",
+                cdn_used: result.cdn
+            },
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+
+    } catch (error) {
+        console.error("YouTube Video Error:", error.message);
+        jsonResponse(res, 500, {
+            status: false,
+            creator: CREATOR_NAME,
+            error: error.message,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    }
+});
+
+// ========== [ ENDPOINT YOUTUBE AUDIO (DENGAN METADATA) - LEGACY ] ==========
 app.get("/api/v1/youtube/audio", async (req, res) => {
     const start = Date.now();
     try {
@@ -407,7 +489,7 @@ app.get("/api/v1/youtube/audio", async (req, res) => {
     }
 });
 
-// ========== [ ENDPOINT YOUTUBE VIDEO ] ==========
+// ========== [ ENDPOINT YOUTUBE VIDEO (DENGAN METADATA) - LEGACY ] ==========
 app.get("/api/v1/youtube/video", async (req, res) => {
     const start = Date.now();
     try {
