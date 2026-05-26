@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const yts = require("yt-search");
+const axios = require("axios");
+const cheerio = require("cheerio");
 
 const app = express();
 app.use(cors());
@@ -31,6 +33,14 @@ const SAVE_TUBE = {
 const NEXRAY = {
     BASE_URL: "https://api.nexray.web.id",
     ENDPOINTS: { DOWNLOAD: "/downloader/tiktok" }
+};
+
+// ==================== [ KONSTANTA SPOTIFY ] ====================
+const SPOTIFY = {
+    BASE_URL: "https://spotmate.online",
+    HEADERS: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+    }
 };
 
 // ==================== [ FUNGSI FETCH WRAPPER ] ====================
@@ -78,7 +88,7 @@ async function getMetadataFromMatthew(videoId) {
     try {
         const url = `${YT_PROXY_API}/videos?key=${YT_PROXY_KEY}&part=snippet,statistics,contentDetails&id=${videoId}`;
         const data = await fetchJson(url);
-        
+
         if (data && data.items && data.items.length > 0) {
             const item = data.items[0];
             return {
@@ -119,17 +129,13 @@ async function getMetadataFromMatthew(videoId) {
 async function searchYouTubeWithMetadata(query, limit = 20) {
     try {
         const searchResults = await yts(query);
-        
         if (!searchResults.videos || searchResults.videos.length === 0) {
             return { success: true, query: query, total_results: 0, results: [] };
         }
-        
         const limitedVideos = searchResults.videos.slice(0, limit);
-        
         const resultsWithMetadata = await Promise.all(
             limitedVideos.map(async (video) => {
                 const matthewMeta = await getMetadataFromMatthew(video.videoId);
-                
                 if (matthewMeta) {
                     return {
                         video_id: matthewMeta.video_id,
@@ -177,7 +183,6 @@ async function searchYouTubeWithMetadata(query, limit = 20) {
                 }
             })
         );
-        
         return {
             success: true,
             query: query,
@@ -197,7 +202,6 @@ function formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    
     if (hours > 0) {
         return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
@@ -229,20 +233,16 @@ async function getRandomCDN() {
 async function downloadFromSavetube(url, format = "mp3") {
     const id = extractYoutubeId(url);
     if (!id) throw new Error("Gagal mengekstrak ID YouTube");
-
     const cdn = await getRandomCDN();
-
     const infoRes = await fetch(`https://${cdn}/v2/info`, {
         method: "POST",
         headers: SAVE_TUBE.HEADERS,
         body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${id}` })
     });
     const infoData = await infoRes.json();
-    
     const raw = infoData?.data;
     const videoInfo = typeof raw === "string" ? await decryptData(raw) : raw;
     const dKey = videoInfo.key || videoInfo.downloadKey || videoInfo.k;
-    
     const isAudio = format === "mp3";
     const dlRes = await fetch(`https://${cdn}/download`, {
         method: "POST",
@@ -254,7 +254,6 @@ async function downloadFromSavetube(url, format = "mp3") {
         })
     });
     const dlData = await dlRes.json();
-
     return {
         url: dlData?.data?.downloadUrl,
         cdn: cdn
@@ -267,7 +266,6 @@ async function downloadTikTokData(url) {
         const reqUrl = `${NEXRAY.BASE_URL}${NEXRAY.ENDPOINTS.DOWNLOAD}?url=${encodeURIComponent(url)}`;
         const response = await fetch(reqUrl);
         const data = await response.json();
-        
         if (data?.status) {
             const d = data.result;
             return {
@@ -298,8 +296,101 @@ async function downloadTikTokData(url) {
     }
 }
 
-// ==================== [ KONFIGURASI ROUTING EXPRESS (ENDPOINTS) ] ====================
+// ==================== [ FUNGSI INTI SPOTIFY DOWNLOAD ] ====================
+async function getSpotifySession() {
+    const res = await axios.get('https://spotmate.online/en1', {
+        headers: SPOTIFY.HEADERS
+    });
+    const $ = cheerio.load(res.data);
+    const token = $('meta[name="csrf-token"]').attr('content');
+    const cookies = res.headers['set-cookie'] || [];
+    return {
+        token,
+        cookieStr: cookies.map(c => c.split(';')[0]).join('; ')
+    };
+}
 
+async function getSpotifyTrackData(url, session) {
+    const res = await axios.post('https://spotmate.online/getTrackData',
+        { spotify_url: url },
+        {
+            headers: {
+                'content-type': 'application/json',
+                'x-csrf-token': session.token,
+                'cookie': session.cookieStr,
+                'origin': 'https://spotmate.online',
+                'referer': 'https://spotmate.online/en1',
+                'user-agent': SPOTIFY.HEADERS['user-agent']
+            }
+        }
+    );
+    return res.data;
+}
+
+async function convertSpotify(url, session) {
+    const res = await axios.post('https://spotmate.online/convert',
+        { urls: url },
+        {
+            headers: {
+                'content-type': 'application/json',
+                'x-csrf-token': session.token,
+                'cookie': session.cookieStr,
+                'origin': 'https://spotmate.online',
+                'referer': 'https://spotmate.online/en1',
+                'user-agent': SPOTIFY.HEADERS['user-agent']
+            }
+        }
+    );
+    return res.data;
+}
+
+async function checkSpotifyTask(taskId, session) {
+    const res = await axios.get(`https://spotmate.online/tasks/${taskId}`, {
+        headers: {
+            'x-csrf-token': session.token,
+            'cookie': session.cookieStr,
+            'origin': 'https://spotmate.online',
+            'referer': 'https://spotmate.online/en1',
+            'user-agent': SPOTIFY.HEADERS['user-agent']
+        }
+    });
+    return res.data;
+}
+
+async function downloadSpotify(url) {
+    const session = await getSpotifySession();
+    const trackInfo = await getSpotifyTrackData(url, session);
+    if (!trackInfo || trackInfo.status === 'error') {
+        throw new Error('Gagal mendapatkan informasi lagu');
+    }
+    const convertInfo = await convertSpotify(url, session);
+    const image = trackInfo.album?.images?.[0]?.url || '';
+    if (convertInfo.error === false && convertInfo.url) {
+        return {
+            title: trackInfo.name,
+            artist: trackInfo.artists?.[0]?.name,
+            image: image,
+            download_url: convertInfo.url
+        };
+    }
+    const taskid = convertInfo.task_id || convertInfo.taskid;
+    if (!taskid) {
+        throw new Error(convertInfo.status || convertInfo.message || 'Gagal memulai konversi');
+    }
+    let taskResult;
+    do {
+        await new Promise(r => setTimeout(r, 3000));
+        taskResult = await checkSpotifyTask(taskid, session);
+    } while (taskResult && (taskResult.status === 'pending' || taskResult.status === 'processing'));
+    return {
+        title: trackInfo.name,
+        artist: trackInfo.artists?.[0]?.name,
+        image: image,
+        download_url: taskResult.url
+    };
+}
+
+// ==================== [ KONFIGURASI ROUTING EXPRESS (ENDPOINTS) ] ====================
 app.get("/", (req, res) => {
     jsonResponse(res, 200, {
         status: true,
@@ -318,6 +409,9 @@ app.get("/", (req, res) => {
                 audio_video: "/api/v1/tiktok/tiktok-audio-video?url=TIKTOK_URL",
                 video: "/api/v1/tiktok/video?url=TIKTOK_URL",
                 audio: "/api/v1/tiktok/audio?url=TIKTOK_URL"
+            },
+            spotify: {
+                mp3: "/api/v1/downloader/spotify-mp3?url=SPOTIFY_URL"
             }
         }
     });
@@ -328,7 +422,6 @@ app.get("/api/v1/youtube/youtube-search", async (req, res) => {
     const start = Date.now();
     try {
         const { query, limit = 20 } = req.query;
-        
         if (!query) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -338,9 +431,7 @@ app.get("/api/v1/youtube/youtube-search", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-
         const result = await searchYouTubeWithMetadata(query, parseInt(limit));
-
         if (result.success) {
             jsonResponse(res, 200, {
                 status: true,
@@ -357,7 +448,6 @@ app.get("/api/v1/youtube/youtube-search", async (req, res) => {
         } else {
             throw new Error(result.error);
         }
-
     } catch (error) {
         console.error("YouTube Search Error:", error.message);
         jsonResponse(res, 500, {
@@ -375,7 +465,6 @@ app.get("/api/v1/youtube/youtube-audio", async (req, res) => {
     const start = Date.now();
     try {
         const { url } = req.query;
-        
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -385,9 +474,7 @@ app.get("/api/v1/youtube/youtube-audio", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-
         const result = await downloadFromSavetube(url, "mp3");
-
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
@@ -400,7 +487,6 @@ app.get("/api/v1/youtube/youtube-audio", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-
     } catch (error) {
         console.error("YouTube Audio Error:", error.message);
         jsonResponse(res, 500, {
@@ -418,7 +504,6 @@ app.get("/api/v1/youtube/youtube-video", async (req, res) => {
     const start = Date.now();
     try {
         const { url, resolusi = "720" } = req.query;
-        
         if (!url) {
             return jsonResponse(res, 400, {
                 status: false,
@@ -428,9 +513,7 @@ app.get("/api/v1/youtube/youtube-video", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-
         const result = await downloadFromSavetube(url, resolusi);
-
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
@@ -443,7 +526,6 @@ app.get("/api/v1/youtube/youtube-video", async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
-
     } catch (error) {
         console.error("YouTube Video Error:", error.message);
         jsonResponse(res, 500, {
@@ -462,15 +544,12 @@ app.get("/api/v1/youtube/audio", async (req, res) => {
     try {
         const { url } = req.query;
         if (!url) throw new Error("Parameter 'url' diperlukan");
-        
         const videoId = extractYoutubeId(url);
         if (!videoId) throw new Error("URL Youtube tidak valid");
-
         const [metadata, download] = await Promise.all([
             getCustomYouTubeMetadata(videoId),
             downloadFromSavetube(url, "mp3")
         ]);
-        
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
@@ -495,15 +574,12 @@ app.get("/api/v1/youtube/video", async (req, res) => {
     try {
         const { url, resolusi = "720" } = req.query;
         if (!url) throw new Error("Parameter 'url' diperlukan");
-        
         const videoId = extractYoutubeId(url);
         if (!videoId) throw new Error("URL Youtube tidak valid");
-
         const [metadata, download] = await Promise.all([
             getCustomYouTubeMetadata(videoId),
             downloadFromSavetube(url, resolusi)
         ]);
-        
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
@@ -529,16 +605,13 @@ app.get("/api/v1/youtube/youtube-play-mp3", async (req, res) => {
     try {
         const { query } = req.query;
         if (!query) throw new Error("Parameter 'query' pencarian diperlukan");
-
         const search = await yts(query);
         if (!search.videos || search.videos.length === 0) throw new Error("Video tidak ditemukan");
         const video = search.videos[0];
-
         const [customMetadata, downloadResult] = await Promise.all([
             getCustomYouTubeMetadata(video.videoId),
             downloadFromSavetube(video.url, "mp3")
         ]);
-
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
@@ -564,19 +637,15 @@ app.get("/api/v1/youtube/youtube-play-mp3", async (req, res) => {
 });
 
 // ==================== [ TIKTOK ENDPOINTS ] ====================
-
 app.get("/api/v1/tiktok/tiktok-audio-video", async (req, res) => {
     const start = Date.now();
     try {
         const { url } = req.query;
         if (!url) throw new Error("Parameter 'url' diperlukan");
-
         const result = await downloadTikTokData(url);
         if (!result.success) throw new Error(result.error);
-
         const data = result.data;
         const isSlideshow = data.slides && data.slides.length > 0;
-
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
@@ -590,10 +659,10 @@ app.get("/api/v1/tiktok/tiktok-audio-video", async (req, res) => {
                 },
                 media: {
                     is_slideshow: isSlideshow,
-                    video: data.video_url ? { 
-                        url_standard: data.video_url, 
-                        url_hd: data.video_hd, 
-                        url_watermark: data.video_watermark 
+                    video: data.video_url ? {
+                        url_standard: data.video_url,
+                        url_hd: data.video_hd,
+                        url_watermark: data.video_watermark
                     } : null,
                     audio: data.audio_url ? { url: data.audio_url } : null,
                     thumbnail: data.thumbnail,
@@ -611,24 +680,20 @@ app.get("/api/v1/tiktok/video", async (req, res) => {
     try {
         const { url } = req.query;
         if (!url) throw new Error("Parameter 'url' dibutuhkan");
-        
         const result = await downloadTikTokData(url);
-        if(!result.success) throw new Error(result.error);
-        
+        if (!result.success) throw new Error(result.error);
         const data = result.data;
-        const videoTarget = data.video_hd || data.video_url; 
-        
+        const videoTarget = data.video_hd || data.video_url;
         if (!videoTarget) throw new Error("URL Video tidak ditemukan (Mungkin ini slideshow foto)");
-
-        jsonResponse(res, 200, { 
-            status: true, 
+        jsonResponse(res, 200, {
+            status: true,
             creator: CREATOR_NAME,
-            result: { 
+            result: {
                 username: data.username,
                 description: data.description,
                 video_url: videoTarget,
                 is_hd: !!data.video_hd
-            } 
+            }
         });
     } catch (error) {
         jsonResponse(res, 500, { status: false, error: error.message });
@@ -639,20 +704,58 @@ app.get("/api/v1/tiktok/audio", async (req, res) => {
     try {
         const { url } = req.query;
         if (!url) throw new Error("Parameter 'url' dibutuhkan");
-        
         const result = await downloadTikTokData(url);
-        if(!result.success || !result.data.audio_url) throw new Error("Audio TikTok tidak ditemukan pada link tersebut");
-        
-        jsonResponse(res, 200, { 
-            status: true, 
+        if (!result.success || !result.data.audio_url) throw new Error("Audio TikTok tidak ditemukan pada link tersebut");
+        jsonResponse(res, 200, {
+            status: true,
             creator: CREATOR_NAME,
-            result: { 
+            result: {
                 username: result.data.username,
                 audio_url: result.data.audio_url
-            } 
+            }
         });
     } catch (error) {
         jsonResponse(res, 500, { status: false, error: error.message });
+    }
+});
+
+// ==================== [ SPOTIFY ENDPOINTS ] ====================
+app.get("/api/v1/downloader/spotify-mp3", async (req, res) => {
+    const start = Date.now();
+    try {
+        const { url } = req.query;
+        if (!url) {
+            return jsonResponse(res, 400, {
+                status: false,
+                creator: CREATOR_NAME,
+                error: "Parameter 'url' diperlukan",
+                example: "/api/v1/downloader/spotify-mp3?url=https://open.spotify.com/track/xxx",
+                timestamp: new Date().toISOString()
+            });
+        }
+        const result = await downloadSpotify(url);
+        jsonResponse(res, 200, {
+            status: true,
+            creator: CREATOR_NAME,
+            result: {
+                title: result.title,
+                artist: result.artist,
+                image: result.image,
+                download_url: result.download_url,
+                format: "mp3"
+            },
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
+    } catch (error) {
+        console.error("Spotify Download Error:", error.message);
+        jsonResponse(res, 500, {
+            status: false,
+            creator: CREATOR_NAME,
+            error: error.message,
+            timestamp: new Date().toISOString(),
+            response_time: `${Date.now() - start}ms`
+        });
     }
 });
 
