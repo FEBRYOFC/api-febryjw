@@ -94,7 +94,9 @@ async function getYoutubeMetadata(videoId) {
             return {
                 title: item.snippet.title,
                 duration: parseDuration(item.contentDetails.duration),
-                channel: item.snippet.channelTitle
+                channel: item.snippet.channelTitle,
+                views: item.statistics.viewCount || "0",
+                likes: item.statistics.likeCount || "0"
             };
         }
         return null;
@@ -147,7 +149,7 @@ async function convertYoutube(url, format = "mp3") {
     return { url: dlData?.data?.downloadUrl };
 }
 
-// ==================== [ YOUTUBE SEARCH ] ====================
+// ==================== [ YOUTUBE SEARCH DENGAN METADATA LENGKAP ] ====================
 async function searchYoutube(query, limit = 5) {
     try {
         const searchResults = await yts(query);
@@ -158,12 +160,26 @@ async function searchYoutube(query, limit = 5) {
         const results = [];
         for (const video of limitedVideos) {
             results.push({
-                ytsearch: video.title,
-                url: video.url
+                title: video.title,
+                url: video.url,
+                videoId: video.videoId,
+                duration: video.duration?.timestamp || "0:00",
+                durationSeconds: video.duration?.seconds || 0,
+                views: video.views || "0",
+                channel: {
+                    name: video.author?.name || "Unknown",
+                    url: video.author?.url || null,
+                    channelId: video.author?.channelId || null
+                },
+                uploaded: video.ago || null,
+                thumbnail: video.thumbnail || null,
+                image: video.image || null,
+                description: video.description || null
             });
         }
         return results;
     } catch (error) {
+        console.error("Search Error:", error.message);
         return [];
     }
 }
@@ -405,7 +421,7 @@ app.get("/api/v1/downloader/youtube", async (req, res) => {
     }
 });
 
-// ==================== [ YOUTUBE SEARCH ENDPOINT ] ====================
+// ==================== [ YOUTUBE SEARCH ENDPOINT DENGAN METADATA LENGKAP ] ====================
 app.get("/api/v1/search/youtube-search", async (req, res) => {
     const start = Date.now();
     try {
@@ -421,7 +437,7 @@ app.get("/api/v1/search/youtube-search", async (req, res) => {
         const results = await searchYoutube(query, parseInt(limit));
         const formattedResults = {};
         for (let i = 0; i < results.length; i++) {
-            formattedResults[`hasil${i + 1}`] = results[i];
+            formattedResults[`${i + 1}`] = results[i];
         }
         jsonResponse(res, 200, {
             status: true,
@@ -477,6 +493,8 @@ app.get("/api/v1/tools/youtube-metadata", async (req, res) => {
             title: metadata.title,
             channel: metadata.channel,
             duration: formatDuration(metadata.duration),
+            views: metadata.views,
+            likes: metadata.likes,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
