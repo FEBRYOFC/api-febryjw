@@ -83,7 +83,7 @@ function formatDuration(seconds) {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
-// ==================== [ YOUTUBE METADATA DARI MATTHEW ] ====================
+// ==================== [ YOUTUBE METADATA ] ====================
 async function getYoutubeMetadata(videoId) {
     try {
         const url = `${YT_PROXY_API}/videos?key=${YT_PROXY_KEY}&part=snippet,statistics,contentDetails&id=${videoId}`;
@@ -92,38 +92,13 @@ async function getYoutubeMetadata(videoId) {
         if (data && data.items && data.items.length > 0) {
             const item = data.items[0];
             return {
-                video_id: item.id,
                 title: item.snippet.title,
-                description: item.snippet.description,
-                channel: {
-                    id: item.snippet.channelId,
-                    name: item.snippet.channelTitle,
-                    url: `https://youtube.com/channel/${item.snippet.channelId}`
-                },
-                published_at: item.snippet.publishedAt,
-                duration: {
-                    iso: item.contentDetails.duration,
-                    seconds: parseDuration(item.contentDetails.duration),
-                    timestamp: formatDuration(parseDuration(item.contentDetails.duration))
-                },
-                statistics: {
-                    views: item.statistics.viewCount || "0",
-                    likes: item.statistics.likeCount || "0",
-                    comments: item.statistics.commentCount || "0"
-                },
-                thumbnails: {
-                    default: item.snippet.thumbnails.default?.url,
-                    medium: item.snippet.thumbnails.medium?.url,
-                    high: item.snippet.thumbnails.high?.url,
-                    standard: item.snippet.thumbnails.standard?.url,
-                    maxres: item.snippet.thumbnails.maxres?.url
-                },
-                url: `https://youtube.com/watch?v=${item.id}`
+                duration: parseDuration(item.contentDetails.duration),
+                channel: item.snippet.channelTitle
             };
         }
         return null;
     } catch (error) {
-        console.error("Metadata Error:", error.message);
         return null;
     }
 }
@@ -164,7 +139,7 @@ async function convertYoutube(url, format = "mp3") {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
             downloadType: isAudio ? "audio" : "video",
-            quality: isAudio ? "128" : String(format),
+            quality: isAudio ? "128" : String(format === "mp4" ? "720" : format),
             key: dKey
         })
     });
@@ -183,12 +158,8 @@ async function searchYoutube(query, limit = 5) {
         const results = [];
         for (const video of limitedVideos) {
             results.push({
-                title: video.title,
-                url: video.url,
-                duration: video.duration?.timestamp || "0:00",
-                views: video.views || "0",
-                channel: video.author?.name || "Unknown",
-                thumbnail: video.thumbnail
+                ytsearch: video.title,
+                url: video.url
             });
         }
         return results;
@@ -350,12 +321,10 @@ async function downloadSpotify(url) {
         throw new Error('Gagal mendapatkan informasi lagu');
     }
     const convertInfo = await convertSpotify(url, session);
-    const image = trackInfo.album?.images?.[0]?.url || '';
     if (convertInfo.error === false && convertInfo.url) {
         return {
             title: trackInfo.name,
             artist: trackInfo.artists?.[0]?.name,
-            image: image,
             download_url: convertInfo.url
         };
     }
@@ -371,7 +340,6 @@ async function downloadSpotify(url) {
     return {
         title: trackInfo.name,
         artist: trackInfo.artists?.[0]?.name,
-        image: image,
         download_url: taskResult.url
     };
 }
@@ -385,8 +353,8 @@ app.get("/", (req, res) => {
     });
 });
 
-// ==================== [ YOUTUBE CONVERT ENDPOINT ] ====================
-app.get("/api/v1/downloader/youtube-convert", async (req, res) => {
+// ==================== [ YOUTUBE DOWNLOAD ENDPOINT ] ====================
+app.get("/api/v1/downloader/youtube", async (req, res) => {
     const start = Date.now();
     try {
         const { url, format = "mp3" } = req.query;
@@ -398,11 +366,32 @@ app.get("/api/v1/downloader/youtube-convert", async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
-        const result = await convertYoutube(url, format);
+        if (format === "mp4") {
+            return jsonResponse(res, 400, {
+                status: false,
+                creator: CREATOR_NAME,
+                error: "Maaf, format video (mp4) belum tersedia saat ini. Silakan gunakan format mp3 untuk download audio.",
+                timestamp: new Date().toISOString()
+            });
+        }
+        const videoId = extractYoutubeId(url);
+        if (!videoId) {
+            return jsonResponse(res, 400, {
+                status: false,
+                creator: CREATOR_NAME,
+                error: "URL YouTube tidak valid",
+                timestamp: new Date().toISOString()
+            });
+        }
+        const [metadata, download] = await Promise.all([
+            getYoutubeMetadata(videoId),
+            convertYoutube(url, "mp3")
+        ]);
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
-            download_url: result.url,
+            duration: metadata?.duration ? formatDuration(metadata.duration) : "0:00",
+            download_url: download.url,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
@@ -430,12 +419,14 @@ app.get("/api/v1/search/youtube-search", async (req, res) => {
             });
         }
         const results = await searchYoutube(query, parseInt(limit));
+        const formattedResults = {};
+        for (let i = 0; i < results.length; i++) {
+            formattedResults[`hasil${i + 1}`] = results[i];
+        }
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
-            query: query,
-            total: results.length,
-            results: results,
+            ...formattedResults,
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
@@ -459,7 +450,6 @@ app.get("/api/v1/tools/youtube-metadata", async (req, res) => {
                 status: false,
                 creator: CREATOR_NAME,
                 error: "Parameter 'url' diperlukan",
-                example: "/api/v1/tools/youtube-metadata?url=https://youtube.com/watch?v=xxx",
                 timestamp: new Date().toISOString()
             });
         }
@@ -484,7 +474,9 @@ app.get("/api/v1/tools/youtube-metadata", async (req, res) => {
         jsonResponse(res, 200, {
             status: true,
             creator: CREATOR_NAME,
-            result: metadata,
+            title: metadata.title,
+            channel: metadata.channel,
+            duration: formatDuration(metadata.duration),
             timestamp: new Date().toISOString(),
             response_time: `${Date.now() - start}ms`
         });
